@@ -15,9 +15,11 @@ def register(app):
 
         status = await message.reply_text("🔎 Searching for song…")
 
-        # Download best audio and convert to mp3 via ffmpeg
-        out_tmpl = os.path.join("downloads", "%(title)s [%(id)s].%(ext)s")
         os.makedirs("downloads", exist_ok=True)
+        out_tmpl = os.path.join("downloads", "%(title)s [%(id)s].%(ext)s")
+
+        # Check if cookies.txt exists
+        cookie_file = "cookies.txt" if os.path.exists("cookies.txt") else None
 
         ydl_opts = {
             "format": "bestaudio/best",
@@ -36,21 +38,20 @@ def register(app):
             "default_search": "ytsearch",
         }
 
+        if cookie_file:
+            ydl_opts["cookiefile"] = cookie_file
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(query, download=True)
-                # If it’s a search, 'entries' exists
                 if "entries" in info:
                     info = info["entries"][0]
-
-                # The output after postprocessing will be .mp3 with the same template
                 base = f"{info.get('title')} [{info.get('id')}]"
                 file_path = os.path.join("downloads", base + ".mp3")
 
         except Exception as e:
             return await status.edit(f"❌ Failed: `{e}`")
 
-        # Build caption with metadata and requester
         caption = (
             f"🎵 **Title:** {info.get('title')}\n"
             f"📺 **Channel:** {info.get('uploader')}\n"
@@ -72,11 +73,7 @@ def register(app):
                 )
             )
         finally:
-            # Clean up file to keep disk small on Railway
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            except:
-                pass
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
         await status.delete()
