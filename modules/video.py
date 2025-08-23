@@ -15,12 +15,15 @@ def register(app):
 
         status = await message.reply_text("🔎 Searching for video…")
 
-        out_tmpl = os.path.join("downloads", "%(title)s [%(id)s].%(ext)s")
         os.makedirs("downloads", exist_ok=True)
+        out_tmpl = os.path.join("downloads", "%(title)s [%(id)s].%(ext)s")
+
+        # Check if cookies.txt exists
+        cookie_file = "cookies.txt" if os.path.exists("cookies.txt") else None
 
         ydl_opts = {
             "format": "bestvideo*+bestaudio/best",
-            "merge_output_format": "mp4",  # ensure mp4 result
+            "merge_output_format": "mp4",
             "noplaylist": True,
             "outtmpl": out_tmpl,
             "quiet": True,
@@ -29,13 +32,15 @@ def register(app):
             "default_search": "ytsearch",
         }
 
+        if cookie_file:
+            ydl_opts["cookiefile"] = cookie_file
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(query, download=True)
                 if "entries" in info:
                     info = info["entries"][0]
                 base = f"{info.get('title')} [{info.get('id')}]"
-                # After merge_output_format, extension should be .mp4
                 file_path = os.path.join("downloads", base + ".mp4")
 
         except Exception as e:
@@ -63,10 +68,7 @@ def register(app):
                 )
             )
         finally:
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            except:
-                pass
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
         await status.delete()
