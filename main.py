@@ -9,19 +9,23 @@ app = Client(
     bot_token=config.BOT_TOKEN
 )
 
-# Import modules
-from modules import song, video
-
+# ---- Start message
 @app.on_message(filters.command("start"))
 async def start(_, message):
     await message.reply_text(
         "👋 Hello! I can download songs & videos from YouTube.\n\n"
-        "🎵 Use `/song <name>` to download a song.\n"
-        "🎥 Use `/video <name>` to download a video.",
+        "🎵 Use `/song <name>` to download a song (MP3).\n"
+        "🎥 Use `/video <name>` to download a video (MP4).",
         reply_markup=InlineKeyboardMarkup(
             [[InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{config.DEVELOPER.replace('@','')}")]]
         )
     )
+
+# ---- Register module handlers
+from modules.song import register as register_song
+from modules.video import register as register_video
+register_song(app)
+register_video(app)
 
 if __name__ == "__main__":
     app.run()
