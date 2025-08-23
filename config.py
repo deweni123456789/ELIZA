@@ -1,4 +1,6 @@
-API_ID = 123456      # your api_id
-API_HASH = "your_api_hash"
-BOT_TOKEN = "your_bot_token"
-DEVELOPER = "@deweni2"
+import os
+
+API_ID = int(os.getenv("API_ID", "123456"))
+API_HASH = os.getenv("API_HASH", "your_api_hash")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "your_bot_token")
+DEVELOPER = os.getenv("DEVELOPER", "@deweni2")
