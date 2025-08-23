@@ -22,7 +22,7 @@ def register(app):
         cookie_file = "cookies.txt" if os.path.exists("cookies.txt") else None
 
         ydl_opts = {
-            "format": "bestaudio/best",
+            "format": "bestaudio[ext=m4a]/bestaudio/best",
             "noplaylist": True,
             "outtmpl": out_tmpl,
             "postprocessors": [
