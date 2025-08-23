@@ -8,11 +8,12 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Faster installs & reproducible builds
+# Copy requirements and install
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+ && pip install --no-cache-dir -U yt-dlp   # << always update yt-dlp to latest
 
-# Copy the rest
+# Copy the rest of the project
 COPY . .
 
 # Helpful envs (Pyrogram session name; tweak if you like)
@@ -21,4 +22,3 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Start the bot
 CMD ["python", "main.py"]
-
