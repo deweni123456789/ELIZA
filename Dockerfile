@@ -21,3 +21,4 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Start the bot
 CMD ["python", "main.py"]
+
