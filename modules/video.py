@@ -22,7 +22,7 @@ def register(app):
         cookie_file = "cookies.txt" if os.path.exists("cookies.txt") else None
 
         ydl_opts = {
-            ""format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
+            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
             "merge_output_format": "mp4",
             "noplaylist": True,
             "outtmpl": out_tmpl,
