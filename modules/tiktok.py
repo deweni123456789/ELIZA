@@ -1,14 +1,14 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-import aiohttp
+import requests
 import datetime
 import os
 import uuid
 import asyncio
 
 API_URL = "https://www.tikwm.com/api/"
-VIDEO_CACHE = {}  # temp store {uid: {"wm": url, "nowm": url, "timestamp": datetime}}
-CACHE_EXPIRY = 300  # seconds, 5 min expiry
+VIDEO_CACHE = {}  # {uid: {"wm": url, "nowm": url, "timestamp": datetime}}
+CACHE_EXPIRY = 300  # 5 minutes
 
 def register(app: Client):
 
@@ -30,11 +30,8 @@ def register(app: Client):
         url = message.command[1]
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(API_URL, params={"url": url}) as resp:
-                    resp_json = await resp.json()
-
-            data = resp_json.get("data")
+            resp = requests.get(API_URL, params={"url": url}).json()
+            data = resp.get("data")
             if not data:
                 return await message.reply_text("❌ Invalid TikTok link or download failed.")
 
@@ -73,7 +70,6 @@ def register(app: Client):
         except Exception as e:
             await message.reply_text(f"⚠️ Error: {str(e)}")
 
-
     @app.on_callback_query(filters.regex("^tt_"))
     async def callback_tiktok(_, query: CallbackQuery):
         try:
@@ -89,20 +85,18 @@ def register(app: Client):
                 return await query.answer("❌ This download link has expired!", show_alert=True)
 
             video_url = video_entry["wm"] if action == "tt_wm" else video_entry["nowm"]
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(video_url) as resp:
-                    file_data = await resp.read()
-
+            file_data = requests.get(video_url).content
             filename = f"tiktok_{uid}.mp4"
+
             with open(filename, "wb") as f:
                 f.write(file_data)
 
             # Delete original "select download option" message
             await query.message.delete()
 
-            # Send video with Developer & Support Group buttons
-            await query.message.chat.send_video(
+            # Send video using client
+            await query._client.send_video(
+                chat_id=query.message.chat.id,
                 video=filename,
                 caption=f"✅ Here is your TikTok video ({'With Watermark' if action=='tt_wm' else 'Without Watermark'})",
                 reply_markup=InlineKeyboardMarkup(
