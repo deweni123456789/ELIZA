@@ -4,7 +4,7 @@ import instaloader
 from pyrogram import Client, filters
 from pyrogram.types import InputMediaPhoto, InputMediaVideo
 
-COOKIES_FILE = "cookies.txt"
+COOKIES_FILE = "cookies1.txt"
 
 def get_loader():
     L = instaloader.Instaloader(
