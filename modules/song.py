@@ -69,15 +69,15 @@ def register(app):
             upload_date = upload_date_raw
 
         caption = (
-            f"🎵 **Title:** {info.get('title')}\n"
-            f"📺 **Channel:** {info.get('uploader')}\n"
-            f"📅 **Upload Date:** {upload_date}\n"
-            f"⏱ **Duration:** {info.get('duration')} sec\n"
-            f"👁 **Views:** {info.get('view_count')}\n"
-            f"👍 **Likes:** {info.get('like_count','N/A')}\n"
-            f"💬 **Comments:** {info.get('comment_count','N/A')}\n\n"
-            f"🙋‍♂️ **Requested by:** {message.from_user.mention}"
-        )
+    f"🎵 **Title:** {info.get('title')}\n"
+    f"📺 **Channel:** {info.get('uploader')}\n"
+    f"📅 **Upload Date:** {upload_date}\n"
+    f"⏱ **Duration:** {duration} sec\n"
+    f"👁 **Views:** {views}\n"
+    f"👍 **Likes:** {likes}\n"
+    f"💬 **Comments:** {comments}\n\n"
+    f"🙋‍♂️ **Requested by:** {message.from_user.mention}"
+)
 
         try:
             # Use streaming=True for faster upload
