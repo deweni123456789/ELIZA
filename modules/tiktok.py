@@ -1,25 +1,41 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-import requests, datetime, os, uuid
+import requests, datetime, os, uuid, asyncio
 
 API_URL = "https://www.tikwm.com/api/"
-VIDEO_CACHE = {}  # store URLs temporarily {uuid: {"wm": url, "nowm": url}}
+VIDEO_CACHE = {}  # temp store {uid: {"wm": url, "nowm": url}}
 
 def register(app: Client):
+
+    # --- /tiktok command
     @app.on_message(filters.command("tiktok"))
     async def tiktok_handler(_, message):
+        # if no link provided -> show guide (auto delete)
         if len(message.command) < 2:
-            return await message.reply_text("❌ Please provide a TikTok link!\n\nUsage: `/tiktok <link>`")
+            guide = await message.reply_text(
+                "👋 Hi! To use TikTok downloader:\n\n"
+                "👉 Send like this:\n"
+                "`/tiktok <TikTok-Video-Link>`\n\n"
+                "📌 Example:\n"
+                "`/tiktok https://www.tiktok.com/@username/video/1234567890`",
+                disable_web_page_preview=True
+            )
+            # auto delete after 20s
+            await asyncio.sleep(20)
+            await guide.delete()
+            return
 
         url = message.command[1]
+
         try:
             resp = requests.get(API_URL, params={"url": url}).json()
             if not resp.get("data"):
                 return await message.reply_text("❌ Invalid TikTok link or download failed.")
 
             data = resp["data"]
-            uid = str(uuid.uuid4())[:8]  # short random key
+            uid = str(uuid.uuid4())[:8]
 
+            # cache urls
             VIDEO_CACHE[uid] = {
                 "wm": data["wmplay"],
                 "nowm": data["play"]
@@ -37,7 +53,8 @@ def register(app: Client):
                 f"🎬 **TikTok Video**\n\n"
                 f"👤 Uploader: `{nickname}` (@{author})\n"
                 f"❤️ Likes: {likes}\n💬 Comments: {comments}\n👁 Views: {views}\n🔁 Shares: {shares}\n"
-                f"📅 Uploaded: {create_time}\n"
+                f"📅 Uploaded: {create_time}\n\n"
+                f"👇 Select download option:"
             )
 
             buttons = InlineKeyboardMarkup(
@@ -45,10 +62,6 @@ def register(app: Client):
                     [
                         InlineKeyboardButton("🎥 With Watermark", callback_data=f"tt_wm|{uid}"),
                         InlineKeyboardButton("🎥 Without Watermark", callback_data=f"tt_nowm|{uid}")
-                    ],
-                    [
-                        InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2"),
-                        InlineKeyboardButton("🎵 Support Group", url="https://t.me/slmusicmania")
                     ]
                 ]
             )
@@ -58,6 +71,7 @@ def register(app: Client):
         except Exception as e:
             await message.reply_text(f"⚠️ Error: {str(e)}")
 
+    # --- Button click handler
     @app.on_callback_query(filters.regex("^tt_"))
     async def callback_tiktok(_, query: CallbackQuery):
         try:
@@ -74,7 +88,7 @@ def register(app: Client):
 
             await query.message.reply_video(
                 video=filename,
-                caption=f"✅ Here is your TikTok video ({'With Watermark' if action=='tt_wm' else 'No Watermark'})",
+                caption=f"✅ Here is your TikTok video ({'With Watermark' if action=='tt_wm' else 'Without Watermark'})",
                 reply_markup=InlineKeyboardMarkup(
                     [[
                         InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2"),
