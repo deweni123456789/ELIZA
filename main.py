@@ -1,7 +1,6 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
-import asyncio
 
 from modules.tiktok import register as register_tiktok
 from modules.instagram import register as register_instagram
@@ -33,20 +32,19 @@ async def start(_, message):
 async def callbacks(bot, query):
     await handle_callbacks(bot, query)
 
-# ---- Async startup to register modules
-async def startup():
-    register_song(app)            # normal functions
-    register_video(app)           # normal functions
-    register_tiktok(app)          # normal functions
-    await register_instagram(app) # async function needs await
+# ---- Register modules
+register_song(app)
+register_video(app)
+register_tiktok(app)
 
-# ---- Run bot
-async def main():
-    await startup()        # register modules
-    await app.start()      # start bot
-    print("Bot is running...")
-    # keep bot running forever
-    await asyncio.Event().wait()  # ✅ replaces app.idle()
+# --- FIXED: make register_instagram synchronous registration
+def register_instagram_sync(app):
+    import asyncio
+    from modules.instagram import register as register_instagram_async
+    # run the async register function safely
+    asyncio.get_event_loop().run_until_complete(register_instagram_async(app))
 
-if __name__ == "__main__":
-    asyncio.run(main())
+register_instagram_sync(app)
+
+# ---- Run bot (Pyrogram v2 style)
+app.run()
