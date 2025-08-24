@@ -1,80 +1,85 @@
 # modules/instagram.py
-from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import instaloader
 import os
+import instaloader
+from pyrogram import Client, filters
+from pyrogram.types import InputMediaPhoto, InputMediaVideo
 
-async def register(app: Client):
+# Initialize Instaloader
+L = instaloader.Instaloader(download_videos=True, download_comments=False, save_metadata=False, post_metadata_txt_pattern="")
 
-    @app.on_message(filters.command("insta"))
-    async def insta_download(client, message):
+def register_instagram(app: Client):
+
+    @app.on_message(filters.command("ig") & filters.private)
+    async def instagram_download(client, message):
         if len(message.command) < 2:
-            await message.reply_text("Usage: /insta <Instagram Post URL>")
+            await message.reply_text("Send a valid Instagram post URL.\nUsage: /ig <link>")
             return
 
         url = message.command[1]
-        requester = message.from_user.mention
-        info_msg = await message.reply_text("Downloading from Instagram... ⏳")
+        msg = await message.reply_text("⏳ Fetching Instagram post...")
 
         try:
-            L = instaloader.Instaloader()  # no login
-
             # Extract shortcode from URL
-            url_parts = url.rstrip("/").split("/")
-            shortcode = url_parts[-1] if url_parts[-1] else url_parts[-2]
+            shortcode = url.rstrip("/").split("/")[-1]
+            post = instaloader.Post.from_shortcode(L.context, shortcode)
 
-            try:
-                post = instaloader.Post.from_shortcode(L.context, shortcode)
-            except Exception:
-                await info_msg.edit_text("❌ Cannot fetch this post. It may be private or invalid.")
-                return
-
+            # Prepare caption with details
             caption = f"""
-📌 Profile: {post.owner_username}
-🗓️ Date: {post.date.strftime('%Y-%m-%d')}
-⏰ Time: {post.date.strftime('%H:%M:%S')}
+📄 Description: {post.caption or 'No description'}
 ❤️ Likes: {post.likes}
 💬 Comments: {post.comments}
-👤 Requested by: {requester}
+🗓 Uploaded: {post.date_utc.strftime('%Y-%m-%d %H:%M:%S')}
+👤 Profile: @{post.owner_username}
+Requested by: {message.from_user.mention}
+Developer: @deweni2
             """
 
-            target_dir = f"temp_{post.shortcode}"
-            os.makedirs(target_dir, exist_ok=True)
+            # Download media to temp folder
+            temp_dir = "temp_instagram"
+            os.makedirs(temp_dir, exist_ok=True)
+            media_files = []
 
-            # Download post
-            L.download_post(post, target=target_dir)
+            if post.typename == "GraphImage":
+                file_path = os.path.join(temp_dir, f"{shortcode}.jpg")
+                L.download_pic(file_path, post.url, post.date_utc)
+                media_files.append(file_path)
 
-            files = os.listdir(target_dir)
-            if not files:
-                await info_msg.edit_text("❌ Download failed: No file found.")
-                return
+            elif post.typename == "GraphVideo":
+                file_path = os.path.join(temp_dir, f"{shortcode}.mp4")
+                L.download_post(post, temp_dir)
+                # Find downloaded video
+                for f in os.listdir(temp_dir):
+                    if f.endswith(".mp4"):
+                        media_files.append(os.path.join(temp_dir, f))
 
-            file_path = os.path.join(target_dir, files[0])
+            elif post.typename == "GraphSidecar":
+                L.download_post(post, temp_dir)
+                for f in os.listdir(temp_dir):
+                    if f.endswith((".jpg", ".mp4")):
+                        media_files.append(os.path.join(temp_dir, f))
 
-            if post.is_video:
-                await client.send_video(
-                    chat_id=message.chat.id,
-                    video=file_path,
-                    caption=caption,
-                    reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2")]]
-                    )
-                )
+            # Send media
+            if len(media_files) == 1:
+                if media_files[0].endswith(".jpg"):
+                    await message.reply_photo(media_files[0], caption=caption)
+                else:
+                    await message.reply_video(media_files[0], caption=caption)
             else:
-                await client.send_photo(
-                    chat_id=message.chat.id,
-                    photo=file_path,
-                    caption=caption,
-                    reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2")]]
-                    )
-                )
-
-            # Clean up
-            for f in os.listdir(target_dir):
-                os.remove(os.path.join(target_dir, f))
-            os.rmdir(target_dir)
-            await info_msg.delete()
+                media_group = []
+                for f in media_files:
+                    if f.endswith(".jpg"):
+                        media_group.append(InputMediaPhoto(f))
+                    else:
+                        media_group.append(InputMediaVideo(f))
+                await message.reply_media_group(media_group)
+                await message.reply_text(caption)
 
         except Exception as e:
-            await info_msg.edit_text(f"❌ Error: {e}")
+            await message.reply_text(f"❌ Failed to fetch Instagram post.\nError: {e}")
+
+        finally:
+            await msg.delete()
+            # Clean temp
+            for f in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, f))
+            os.rmdir(temp_dir)
