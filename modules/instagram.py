@@ -1,11 +1,8 @@
 # modules/instagram.py
-import os
-import instaloader
+import requests
 from pyrogram import Client, filters
-from pyrogram.types import InputMediaPhoto, InputMediaVideo
 
-# Instaloader init
-L = instaloader.Instaloader(download_videos=True, download_comments=False, save_metadata=False, post_metadata_txt_pattern="")
+API_URL = "https://api.sssgram.com/ig"  # Instagram downloader API
 
 def register(app: Client):
 
@@ -19,60 +16,32 @@ def register(app: Client):
         msg = await message.reply_text("⏳ Downloading Instagram post...")
 
         try:
-            shortcode = url.rstrip("/").split("/")[-1]
-            post = instaloader.Post.from_shortcode(L.context, shortcode)
+            # Call API
+            r = requests.post(API_URL, json={"url": url})
+            data = r.json()
 
-            # Only description + requester + developer
+            if "download" not in data or not data["download"]:
+                await message.reply_text("❌ Could not fetch this post. Maybe private or unsupported.")
+                return
+
+            # Take first media link
+            media_url = data["download"][0]["url"]
+
+            # Caption (simple: description + requester + dev)
             caption = f"""
-📄 {post.caption or 'No description'}
+📄 Instagram Post
 👤 Requested by: {message.from_user.mention}
 👨‍💻 Developer: @deweni2
-            """
+"""
 
-            temp_dir = "temp_instagram"
-            os.makedirs(temp_dir, exist_ok=True)
-            media_files = []
-
-            if post.typename == "GraphImage":
-                file_path = os.path.join(temp_dir, f"{shortcode}.jpg")
-                L.download_pic(file_path, post.url, post.date_utc)
-                media_files.append(file_path)
-
-            elif post.typename == "GraphVideo":
-                L.download_post(post, temp_dir)
-                for f in os.listdir(temp_dir):
-                    if f.endswith(".mp4"):
-                        media_files.append(os.path.join(temp_dir, f))
-
-            elif post.typename == "GraphSidecar":
-                L.download_post(post, temp_dir)
-                for f in os.listdir(temp_dir):
-                    if f.endswith((".jpg", ".mp4")):
-                        media_files.append(os.path.join(temp_dir, f))
-
-            # Send
-            if len(media_files) == 1:
-                if media_files[0].endswith(".jpg"):
-                    await message.reply_photo(media_files[0], caption=caption)
-                else:
-                    await message.reply_video(media_files[0], caption=caption)
+            # Decide media type
+            if media_url.endswith(".mp4"):
+                await message.reply_video(media_url, caption=caption)
             else:
-                media_group = []
-                for f in media_files:
-                    if f.endswith(".jpg"):
-                        media_group.append(InputMediaPhoto(f))
-                    else:
-                        media_group.append(InputMediaVideo(f))
-                await message.reply_media_group(media_group)
-                await message.reply_text(caption)
+                await message.reply_photo(media_url, caption=caption)
 
         except Exception as e:
             await message.reply_text(f"❌ Failed to fetch Instagram post.\nError: {e}")
 
         finally:
             await msg.delete()
-            # cleanup
-            if os.path.exists(temp_dir):
-                for f in os.listdir(temp_dir):
-                    os.remove(os.path.join(temp_dir, f))
-                os.rmdir(temp_dir)
