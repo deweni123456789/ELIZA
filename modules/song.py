@@ -7,7 +7,6 @@ import config
 
 def register(app):
     def sanitize_filename(name):
-        """Remove illegal characters from filename"""
         return re.sub(r'[\\/*?:"<>|]', "", name)
 
     @app.on_message(filters.command("song"))
@@ -19,17 +18,17 @@ def register(app):
             )
 
         status = await message.reply_text("🔎 Searching for song…")
-
         os.makedirs("downloads", exist_ok=True)
-        out_tmpl = os.path.join("downloads", "%(title)s [%(id)s].%(ext)s")
 
-        # Check if cookies.txt exists
-        cookie_file = "cookies.txt" if os.path.exists("cookies.txt") else None
-
+        # yt_dlp options
         ydl_opts = {
-            "format": "bestaudio[ext=m4a]/bestaudio/best",
+            "format": "bestaudio/best",
             "noplaylist": True,
-            "outtmpl": out_tmpl,
+            "quiet": True,
+            "geo_bypass": True,
+            "nocheckcertificate": True,
+            "default_search": "ytsearch",
+            "outtmpl": "downloads/%(title)s.%(ext)s",
             "postprocessors": [
                 {
                     "key": "FFmpegExtractAudio",
@@ -37,14 +36,11 @@ def register(app):
                     "preferredquality": "192",
                 }
             ],
-            "quiet": True,
-            "geo_bypass": True,
-            "nocheckcertificate": True,
-            "default_search": "ytsearch",
         }
 
-        if cookie_file:
-            ydl_opts["cookiefile"] = cookie_file
+        # check cookies
+        if os.path.exists("cookies.txt"):
+            ydl_opts["cookiefile"] = "cookies.txt"
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -52,9 +48,9 @@ def register(app):
                 if "entries" in info:
                     info = info["entries"][0]
 
-                # Sanitize filename
-                base = sanitize_filename(f"{info.get('title')} [{info.get('id')}]")
-                file_path = os.path.join("downloads", base + ".mp3")
+                # Get exact mp3 filename
+                filename = ydl.prepare_filename(info)
+                file_path = os.path.splitext(filename)[0] + ".mp3"
 
                 if not os.path.exists(file_path):
                     return await status.edit(f"❌ File not found: {file_path}")
