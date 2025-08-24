@@ -1,10 +1,16 @@
 import os
+import re
 import yt_dlp
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
+from datetime import datetime
 
 def register(app):
+    def sanitize_filename(name):
+        """Remove illegal characters from filename"""
+        return re.sub(r'[\\/*?:"<>|]', "", name)
+
     @app.on_message(filters.command("video"))
     async def video_handler(client, message):
         query = " ".join(message.command[1:])
@@ -14,11 +20,9 @@ def register(app):
             )
 
         status = await message.reply_text("🔎 Searching for video…")
-
         os.makedirs("downloads", exist_ok=True)
         out_tmpl = os.path.join("downloads", "%(title)s [%(id)s].%(ext)s")
 
-        # Check if cookies.txt exists
         cookie_file = "cookies.txt" if os.path.exists("cookies.txt") else None
 
         ydl_opts = {
@@ -40,20 +44,43 @@ def register(app):
                 info = ydl.extract_info(query, download=True)
                 if "entries" in info:
                     info = info["entries"][0]
-                base = f"{info.get('title')} [{info.get('id')}]"
+
+                # Sanitize filename
+                base = sanitize_filename(f"{info.get('title')} [{info.get('id')}]")
                 file_path = os.path.join("downloads", base + ".mp4")
+                if not os.path.exists(file_path):
+                    return await status.edit(f"❌ File not found: {file_path}")
 
         except Exception as e:
             return await status.edit(f"❌ Failed: `{e}`")
 
+        # Upload date to YYYY/MM/DD
+        upload_date_raw = info.get('upload_date')
+        try:
+            upload_date = datetime.strptime(str(upload_date_raw), "%Y%m%d").strftime("%Y/%m/%d")
+        except:
+            upload_date = upload_date_raw
+
+        # Safe numeric conversion
+        def safe_int(val):
+            try:
+                return int(val)
+            except:
+                return 0
+
+        duration = safe_int(info.get('duration'))
+        views = safe_int(info.get('view_count'))
+        likes = safe_int(info.get('like_count'))
+        comments = safe_int(info.get('comment_count'))
+
         caption = (
             f"🎥 **Title:** {info.get('title')}\n"
             f"📺 **Channel:** {info.get('uploader')}\n"
-            f"📅 **Upload Date:** {info.get('upload_date')}\n"
-            f"⏱ **Duration:** {info.get('duration')} sec\n"
-            f"👁 **Views:** {info.get('view_count')}\n"
-            f"👍 **Likes:** {info.get('like_count','N/A')}\n"
-            f"💬 **Comments:** {info.get('comment_count','N/A')}\n\n"
+            f"📅 **Upload Date:** {upload_date}\n"
+            f"⏱ **Duration:** {duration} sec\n"
+            f"👁 **Views:** {views}\n"
+            f"👍 **Likes:** {likes}\n"
+            f"💬 **Comments:** {comments}\n\n"
             f"🙋‍♂️ **Requested by:** {message.from_user.mention}"
         )
 
@@ -64,8 +91,12 @@ def register(app):
                 caption=caption,
                 supports_streaming=True,
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{config.DEVELOPER.replace('@','')}")]]
-                )
+                    [[InlineKeyboardButton(
+                        "👨‍💻 Developer",
+                        url=f"https://t.me/{config.DEVELOPER.replace('@','')}"
+                    )]]
+                ),
+                streaming=True  # for faster upload
             )
         finally:
             if os.path.exists(file_path):
