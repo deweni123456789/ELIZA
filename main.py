@@ -42,10 +42,11 @@ async def startup():
 
 # ---- Run bot
 async def main():
-    await startup()       # register modules
-    await app.start()     # start bot
+    await startup()        # register modules
+    await app.start()      # start bot
     print("Bot is running...")
-    await app.idle()      # keep running
+    # keep bot running forever
+    await asyncio.Event().wait()  # ✅ replaces app.idle()
 
 if __name__ == "__main__":
     asyncio.run(main())
