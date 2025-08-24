@@ -14,13 +14,20 @@ async def register(app: Client):
 
         url = message.command[1]
         requester = message.from_user.mention
-
         info_msg = await message.reply_text("Downloading from Instagram... ⏳")
 
         try:
-            L = instaloader.Instaloader()
-            shortcode = url.rstrip("/").split("/")[-1]
-            post = instaloader.Post.from_shortcode(L.context, shortcode)
+            L = instaloader.Instaloader()  # no login
+
+            # Extract shortcode from URL
+            url_parts = url.rstrip("/").split("/")
+            shortcode = url_parts[-1] if url_parts[-1] else url_parts[-2]
+
+            try:
+                post = instaloader.Post.from_shortcode(L.context, shortcode)
+            except Exception:
+                await info_msg.edit_text("❌ Cannot fetch this post. It may be private or invalid.")
+                return
 
             caption = f"""
 📌 Profile: {post.owner_username}
@@ -37,15 +44,13 @@ async def register(app: Client):
             # Download post
             L.download_post(post, target=target_dir)
 
-            # Detect downloaded file
             files = os.listdir(target_dir)
             if not files:
-                await info_msg.edit_text("❌ Error: No file was downloaded.")
+                await info_msg.edit_text("❌ Download failed: No file found.")
                 return
 
             file_path = os.path.join(target_dir, files[0])
 
-            # Send video or photo
             if post.is_video:
                 await client.send_video(
                     chat_id=message.chat.id,
@@ -65,11 +70,10 @@ async def register(app: Client):
                     )
                 )
 
-            # Cleanup temp folder
+            # Clean up
             for f in os.listdir(target_dir):
                 os.remove(os.path.join(target_dir, f))
             os.rmdir(target_dir)
-
             await info_msg.delete()
 
         except Exception as e:
