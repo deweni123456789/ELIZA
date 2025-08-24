@@ -8,7 +8,6 @@ from datetime import datetime
 
 def register(app):
     def sanitize_filename(name):
-        """Remove illegal characters from filename"""
         return re.sub(r'[\\/*?:"<>|]', "", name)
 
     @app.on_message(filters.command("song"))
@@ -22,7 +21,6 @@ def register(app):
         status = await message.reply_text("🔎 Searching for song…")
         os.makedirs("downloads", exist_ok=True)
 
-        # yt_dlp options for fast download
         ydl_opts = {
             "format": "bestaudio[ext=m4a]/bestaudio/best",
             "noplaylist": True,
@@ -39,9 +37,9 @@ def register(app):
                 }
             ],
             "noprogress": True,
-            "buffersize": "64K",  # bigger buffer for faster download
+            "buffersize": "64K",
             "fragment_retries": 3,
-            "concurrent_fragment_downloads": 4,  # parallel download fragments
+            "concurrent_fragment_downloads": 4,
         }
 
         if os.path.exists("cookies.txt"):
@@ -62,18 +60,24 @@ def register(app):
         except Exception as e:
             return await status.edit(f"❌ Failed: `{e}`")
 
-        # Format upload date to YYYY/MM/DD
+        # Format upload date YYYY/MM/DD
         upload_date_raw = info.get('upload_date')
         try:
-            upload_date = datetime.strptime(upload_date_raw, "%Y%m%d").strftime("%Y/%m/%d")
+            upload_date = datetime.strptime(str(upload_date_raw), "%Y%m%d").strftime("%Y/%m/%d")
         except:
             upload_date = upload_date_raw
 
-        # Convert numeric fields safely
-        duration = int(info.get('duration') or 0)
-        views = int(info.get('view_count') or 0)
-        likes = int(info.get('like_count') or 0)
-        comments = int(info.get('comment_count') or 0)
+        # Safe numeric conversion
+        def safe_int(val):
+            try:
+                return int(val)
+            except:
+                return 0
+
+        duration = safe_int(info.get('duration'))
+        views = safe_int(info.get('view_count'))
+        likes = safe_int(info.get('like_count'))
+        comments = safe_int(info.get('comment_count'))
 
         caption = (
             f"🎵 **Title:** {info.get('title')}\n"
@@ -99,7 +103,7 @@ def register(app):
                         )
                     ]]
                 ),
-                streaming=True  # streaming mode for faster upload
+                streaming=True
             )
         finally:
             if os.path.exists(file_path):
