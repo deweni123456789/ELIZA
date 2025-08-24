@@ -1,6 +1,7 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
+from modules.tiktok import register as register_tiktok
 
 app = Client(
     "downloader-bot",
@@ -26,6 +27,7 @@ from modules.song import register as register_song
 from modules.video import register as register_video
 register_song(app)
 register_video(app)
+register_tiktok(app)
 
 if __name__ == "__main__":
     app.run()
