@@ -1,32 +1,25 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-import requests, datetime, os, uuid, asyncio
+import requests, datetime, os, uuid
 
 API_URL = "https://www.tikwm.com/api/"
-VIDEO_CACHE = {}  # temp store {uid: {"wm": url, "nowm": url}}
+VIDEO_CACHE = {}  # temp cache {uid: {"wm": url, "nowm": url, "caption": str, "thumb": url}}
 
 def register(app: Client):
 
-    # --- /tiktok command
     @app.on_message(filters.command("tiktok"))
     async def tiktok_handler(_, message):
-        # if no link provided -> show guide (auto delete)
         if len(message.command) < 2:
-            guide = await message.reply_text(
-                "👋 Hi! To use TikTok downloader:\n\n"
-                "👉 Send like this:\n"
+            return await message.reply_text(
+                "👋 To use TikTok downloader:\n\n"
+                "👉 Correct usage:\n"
                 "`/tiktok <TikTok-Video-Link>`\n\n"
                 "📌 Example:\n"
                 "`/tiktok https://www.tiktok.com/@username/video/1234567890`",
                 disable_web_page_preview=True
             )
-            # auto delete after 20s
-            await asyncio.sleep(20)
-            await guide.delete()
-            return
 
         url = message.command[1]
-
         try:
             resp = requests.get(API_URL, params={"url": url}).json()
             if not resp.get("data"):
@@ -35,11 +28,9 @@ def register(app: Client):
             data = resp["data"]
             uid = str(uuid.uuid4())[:8]
 
-            # cache urls
-            VIDEO_CACHE[uid] = {
-                "wm": data["wmplay"],
-                "nowm": data["play"]
-            }
+            wm_url = data["wmplay"]
+            no_wm_url = data["play"]
+            thumb = data["cover"]
 
             author = data["author"]["unique_id"]
             nickname = data["author"]["nickname"]
@@ -53,9 +44,16 @@ def register(app: Client):
                 f"🎬 **TikTok Video**\n\n"
                 f"👤 Uploader: `{nickname}` (@{author})\n"
                 f"❤️ Likes: {likes}\n💬 Comments: {comments}\n👁 Views: {views}\n🔁 Shares: {shares}\n"
-                f"📅 Uploaded: {create_time}\n\n"
-                f"👇 Select download option:"
+                f"📅 Uploaded: {create_time}"
             )
+
+            # cache info
+            VIDEO_CACHE[uid] = {
+                "wm": wm_url,
+                "nowm": no_wm_url,
+                "caption": caption,
+                "thumb": thumb
+            }
 
             buttons = InlineKeyboardMarkup(
                 [
@@ -66,21 +64,28 @@ def register(app: Client):
                 ]
             )
 
-            await message.reply_text(caption, reply_markup=buttons)
+            await message.reply_photo(
+                photo=thumb,
+                caption=caption + "\n\n👇 Select download option:",
+                reply_markup=buttons
+            )
 
         except Exception as e:
             await message.reply_text(f"⚠️ Error: {str(e)}")
 
-    # --- Button click handler
     @app.on_callback_query(filters.regex("^tt_"))
     async def callback_tiktok(_, query: CallbackQuery):
         try:
             action, uid = query.data.split("|")
-            video_url = VIDEO_CACHE.get(uid, {}).get("wm" if action=="tt_wm" else "nowm")
+            video_info = VIDEO_CACHE.get(uid)
 
-            if not video_url:
+            if not video_info:
                 return await query.answer("❌ Expired or invalid link!", show_alert=True)
 
+            # delete old button msg
+            await query.message.delete()
+
+            video_url = video_info["wm"] if action == "tt_wm" else video_info["nowm"]
             file_data = requests.get(video_url).content
             filename = f"tiktok_{uid}.mp4"
             with open(filename, "wb") as f:
@@ -88,7 +93,8 @@ def register(app: Client):
 
             await query.message.reply_video(
                 video=filename,
-                caption=f"✅ Here is your TikTok video ({'With Watermark' if action=='tt_wm' else 'Without Watermark'})",
+                caption=video_info["caption"],
+                thumb=requests.get(video_info["thumb"]).content,
                 reply_markup=InlineKeyboardMarkup(
                     [[
                         InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2"),
