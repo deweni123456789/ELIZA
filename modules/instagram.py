@@ -7,7 +7,7 @@ from pyrogram.types import InputMediaPhoto, InputMediaVideo
 # Initialize Instaloader
 L = instaloader.Instaloader(download_videos=True, download_comments=False, save_metadata=False, post_metadata_txt_pattern="")
 
-def register_instagram(app: Client):
+def register(app: Client):
 
     @app.on_message(filters.command("ig") & filters.private)
     async def instagram_download(client, message):
@@ -45,9 +45,7 @@ Developer: @deweni2
                 media_files.append(file_path)
 
             elif post.typename == "GraphVideo":
-                file_path = os.path.join(temp_dir, f"{shortcode}.mp4")
                 L.download_post(post, temp_dir)
-                # Find downloaded video
                 for f in os.listdir(temp_dir):
                     if f.endswith(".mp4"):
                         media_files.append(os.path.join(temp_dir, f))
