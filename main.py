@@ -3,6 +3,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
 from modules.tiktok import register as register_tiktok
 
+
 app = Client(
     "downloader-bot",
     api_id=config.API_ID,
@@ -31,6 +32,7 @@ from modules.video import register as register_video
 register_song(app)
 register_video(app)
 register_tiktok(app)
+register_instagram(app)
 
 # ---- Callback handler
 @app.on_callback_query()
