@@ -8,7 +8,15 @@ from datetime import datetime
 
 def register(app):
     def sanitize_filename(name):
+        """Remove illegal characters from filename"""
         return re.sub(r'[\\/*?:"<>|]', "", name)
+
+    def safe_int(val):
+        """Convert value to int safely"""
+        try:
+            return int(val)
+        except:
+            return 0
 
     @app.on_message(filters.command("song"))
     async def song_handler(client, message):
@@ -51,7 +59,6 @@ def register(app):
                 if "entries" in info:
                     info = info["entries"][0]
 
-                # Sanitize filename
                 base = sanitize_filename(f"{info.get('title')} [{info.get('id')}]")
                 file_path = os.path.join("downloads", base + ".mp3")
                 if not os.path.exists(file_path):
@@ -67,13 +74,7 @@ def register(app):
         except:
             upload_date = upload_date_raw
 
-        # Safe numeric conversion
-        def safe_int(val):
-            try:
-                return int(val)
-            except:
-                return 0
-
+        # Numeric fields safely
         duration = safe_int(info.get('duration'))
         views = safe_int(info.get('view_count'))
         likes = safe_int(info.get('like_count'))
