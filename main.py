@@ -2,7 +2,6 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
 from modules.tiktok import register as register_tiktok
-from vc_player import add_to_queue, handle_callbacks
 
 app = Client(
     "downloader-bot",
@@ -24,18 +23,7 @@ async def start(_, message):
         )
     )
 
-# ---- Play Command (directly add to queue)
-@app.on_message(filters.command("play"))
-async def play_handler(bot, message):
-    if len(message.command) < 2:
-        return await message.reply("❌ Please provide a YouTube link or file name!")
 
-    yt_link = message.text.split(None, 1)[1]
-    title = "YouTube Song"   # Replace with yt-dlp metadata
-    duration = "4:30"        # Replace with metadata
-    file_path = "downloads/sample.mp3"  # Replace with downloaded file
-    
-    await add_to_queue(file_path, title, duration, message.from_user.mention, message.chat.id, bot, message)
 
 # ---- Register other modules
 from modules.song import register as register_song
