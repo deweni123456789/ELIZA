@@ -13,13 +13,14 @@ async def register(app: Client):
             return
 
         url = message.command[1]
-        requester = message.from_user.mention  # mention of the user who requested
+        requester = message.from_user.mention
 
         info_msg = await message.reply_text("Downloading from Instagram... ⏳")
 
         try:
             L = instaloader.Instaloader()
-            post = instaloader.Post.from_shortcode(L.context, url.split("/")[-2])
+            shortcode = url.rstrip("/").split("/")[-1]
+            post = instaloader.Post.from_shortcode(L.context, shortcode)
 
             caption = f"""
 📌 Profile: {post.owner_username}
@@ -27,40 +28,46 @@ async def register(app: Client):
 ⏰ Time: {post.date.strftime('%H:%M:%S')}
 ❤️ Likes: {post.likes}
 💬 Comments: {post.comments}
-🔁 Shares: N/A
 👤 Requested by: {requester}
             """
 
             target_dir = f"temp_{post.shortcode}"
             os.makedirs(target_dir, exist_ok=True)
 
-            # Download video or image
+            # Download post
+            L.download_post(post, target=target_dir)
+
+            # Detect downloaded file
+            files = os.listdir(target_dir)
+            if not files:
+                await info_msg.edit_text("❌ Error: No file was downloaded.")
+                return
+
+            file_path = os.path.join(target_dir, files[0])
+
+            # Send video or photo
             if post.is_video:
-                L.download_post(post, target=target_dir)
-                video_path = os.path.join(target_dir, post.shortcode + ".mp4")
                 await client.send_video(
                     chat_id=message.chat.id,
-                    video=video_path,
+                    video=file_path,
                     caption=caption,
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2")]]
                     )
                 )
             else:
-                L.download_post(post, target=target_dir)
-                photo_path = os.path.join(target_dir, post.shortcode + ".jpg")
                 await client.send_photo(
                     chat_id=message.chat.id,
-                    photo=photo_path,
+                    photo=file_path,
                     caption=caption,
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2")]]
                     )
                 )
 
-            # Clean up temp folder
-            for file in os.listdir(target_dir):
-                os.remove(os.path.join(target_dir, file))
+            # Cleanup temp folder
+            for f in os.listdir(target_dir):
+                os.remove(os.path.join(target_dir, f))
             os.rmdir(target_dir)
 
             await info_msg.delete()
