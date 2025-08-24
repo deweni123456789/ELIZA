@@ -1,7 +1,6 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
-
 from modules.tiktok import register as register_tiktok
 from modules.instagram import register as register_instagram
 from modules.song import register as register_song
@@ -44,7 +43,7 @@ def register_instagram_sync(app):
     # run the async register function safely
     asyncio.get_event_loop().run_until_complete(register_instagram_async(app))
 
-register_instagram_sync(app)
+register_instagram(app)
 
 # ---- Run bot (Pyrogram v2 style)
 app.run()
