@@ -2,10 +2,11 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
 import asyncio
+
 from modules.tiktok import register as register_tiktok
 from modules.instagram import register as register_instagram
-
-
+from modules.song import register as register_song
+from modules.video import register as register_video
 
 app = Client(
     "downloader-bot",
@@ -27,20 +28,24 @@ async def start(_, message):
         )
     )
 
-
-
-# ---- Register other modules
-from modules.song import register as register_song
-from modules.video import register as register_video
-register_song(app)
-register_video(app)
-register_tiktok(app)
-register_instagram(app)
-
 # ---- Callback handler
 @app.on_callback_query()
 async def callbacks(bot, query):
     await handle_callbacks(bot, query)
 
+# ---- Async startup to register modules
+async def startup():
+    register_song(app)            # normal functions
+    register_video(app)           # normal functions
+    register_tiktok(app)          # normal functions
+    await register_instagram(app) # async function needs await
+
+# ---- Run bot
+async def main():
+    await startup()       # register modules
+    await app.start()     # start bot
+    print("Bot is running...")
+    await app.idle()      # keep running
+
 if __name__ == "__main__":
-    app.run()
+    asyncio.run(main())
