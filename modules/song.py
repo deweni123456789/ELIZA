@@ -8,6 +8,7 @@ from datetime import datetime
 
 def register(app):
     def sanitize_filename(name):
+        """Remove illegal characters from filename"""
         return re.sub(r'[\\/*?:"<>|]', "", name)
 
     @app.on_message(filters.command("song"))
@@ -21,7 +22,7 @@ def register(app):
         status = await message.reply_text("🔎 Searching for song…")
         os.makedirs("downloads", exist_ok=True)
 
-        # yt_dlp options (optimized for faster download)
+        # yt_dlp options for fast download
         ydl_opts = {
             "format": "bestaudio[ext=m4a]/bestaudio/best",
             "noplaylist": True,
@@ -37,9 +38,10 @@ def register(app):
                     "preferredquality": "192",
                 }
             ],
-            # Fast download options
             "noprogress": True,
-            "buffersize": "16K",
+            "buffersize": "64K",  # bigger buffer for faster download
+            "fragment_retries": 3,
+            "concurrent_fragment_downloads": 4,  # parallel download fragments
         }
 
         if os.path.exists("cookies.txt"):
@@ -54,7 +56,6 @@ def register(app):
                 # Sanitize filename
                 base = sanitize_filename(f"{info.get('title')} [{info.get('id')}]")
                 file_path = os.path.join("downloads", base + ".mp3")
-
                 if not os.path.exists(file_path):
                     return await status.edit(f"❌ File not found: {file_path}")
 
@@ -62,25 +63,30 @@ def register(app):
             return await status.edit(f"❌ Failed: `{e}`")
 
         # Format upload date to YYYY/MM/DD
-        upload_date_raw = info.get('upload_date')  # usually YYYYMMDD
+        upload_date_raw = info.get('upload_date')
         try:
             upload_date = datetime.strptime(upload_date_raw, "%Y%m%d").strftime("%Y/%m/%d")
         except:
             upload_date = upload_date_raw
 
+        # Convert numeric fields safely
+        duration = int(info.get('duration') or 0)
+        views = int(info.get('view_count') or 0)
+        likes = int(info.get('like_count') or 0)
+        comments = int(info.get('comment_count') or 0)
+
         caption = (
-    f"🎵 **Title:** {info.get('title')}\n"
-    f"📺 **Channel:** {info.get('uploader')}\n"
-    f"📅 **Upload Date:** {upload_date}\n"
-    f"⏱ **Duration:** {duration} sec\n"
-    f"👁 **Views:** {views}\n"
-    f"👍 **Likes:** {likes}\n"
-    f"💬 **Comments:** {comments}\n\n"
-    f"🙋‍♂️ **Requested by:** {message.from_user.mention}"
-)
+            f"🎵 **Title:** {info.get('title')}\n"
+            f"📺 **Channel:** {info.get('uploader')}\n"
+            f"📅 **Upload Date:** {upload_date}\n"
+            f"⏱ **Duration:** {duration} sec\n"
+            f"👁 **Views:** {views}\n"
+            f"👍 **Likes:** {likes}\n"
+            f"💬 **Comments:** {comments}\n\n"
+            f"🙋‍♂️ **Requested by:** {message.from_user.mention}"
+        )
 
         try:
-            # Use streaming=True for faster upload
             await client.send_audio(
                 chat_id=message.chat.id,
                 audio=file_path,
@@ -93,8 +99,7 @@ def register(app):
                         )
                     ]]
                 ),
-                # Use streaming=True to reduce upload memory & speed
-                streaming=True
+                streaming=True  # streaming mode for faster upload
             )
         finally:
             if os.path.exists(file_path):
