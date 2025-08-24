@@ -1,6 +1,7 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
+import asyncio
 from modules.tiktok import register as register_tiktok
 from modules.instagram import register as register_instagram
 
