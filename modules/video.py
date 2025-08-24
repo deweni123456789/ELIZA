@@ -8,7 +8,6 @@ from datetime import datetime
 
 def register(app):
     def sanitize_filename(name):
-        """Remove illegal characters from filename"""
         return re.sub(r'[\\/*?:"<>|]', "", name)
 
     @app.on_message(filters.command("video"))
@@ -54,14 +53,13 @@ def register(app):
         except Exception as e:
             return await status.edit(f"❌ Failed: `{e}`")
 
-        # Upload date to YYYY/MM/DD
+        # --- Upload date YYYY/MM/DD ---
         upload_date_raw = info.get('upload_date')
         try:
             upload_date = datetime.strptime(str(upload_date_raw), "%Y%m%d").strftime("%Y/%m/%d")
         except:
             upload_date = upload_date_raw
 
-        # Safe numeric conversion
         def safe_int(val):
             try:
                 return int(val)
@@ -89,14 +87,13 @@ def register(app):
                 chat_id=message.chat.id,
                 video=file_path,
                 caption=caption,
-                supports_streaming=True,
+                supports_streaming=True,  # <-- keep this
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton(
                         "👨‍💻 Developer",
                         url=f"https://t.me/{config.DEVELOPER.replace('@','')}"
                     )]]
-                ),
-                streaming=True  # for faster upload
+                )
             )
         finally:
             if os.path.exists(file_path):
