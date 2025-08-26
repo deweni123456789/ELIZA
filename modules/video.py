@@ -6,6 +6,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
 from datetime import datetime
 
+
 def register(app):
     def sanitize_filename(name):
         return re.sub(r'[\\/*?:"<>|]', "", name)
@@ -44,9 +45,13 @@ def register(app):
                 if "entries" in info:
                     info = info["entries"][0]
 
-                # Sanitize filename
-                base = sanitize_filename(f"{info.get('title')} [{info.get('id')}]")
-                file_path = os.path.join("downloads", base + ".mp4")
+                # ✅ Get actual downloaded file path
+                file_path = ydl.prepare_filename(info)
+
+                # Sometimes yt-dlp saves as .webm first → then .mp4 after merge
+                if not file_path.endswith(".mp4") and os.path.exists(file_path.replace(".webm", ".mp4")):
+                    file_path = file_path.replace(".webm", ".mp4")
+
                 if not os.path.exists(file_path):
                     return await status.edit(f"❌ File not found: {file_path}")
 
@@ -87,7 +92,7 @@ def register(app):
                 chat_id=message.chat.id,
                 video=file_path,
                 caption=caption,
-                supports_streaming=True,  # <-- keep this
+                supports_streaming=True,
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton(
                         "👨‍💻 Developer",
