@@ -7,7 +7,7 @@ import uuid
 import asyncio
 
 API_URL = "https://www.tikwm.com/api/"
-VIDEO_CACHE = {}  # {uid: {"wm": url, "nowm": url, "timestamp": datetime}}
+VIDEO_CACHE = {}  # {uid: {"wm": url, "nowm": url, "music": url, "timestamp": datetime}}
 CACHE_EXPIRY = 300  # 5 minutes
 
 def register(app: Client):
@@ -39,6 +39,7 @@ def register(app: Client):
             VIDEO_CACHE[uid] = {
                 "wm": data["wmplay"],
                 "nowm": data["play"],
+                "music": data["music"],   # ✅ Audio-only link
                 "timestamp": datetime.datetime.now()
             }
 
@@ -62,7 +63,10 @@ def register(app: Client):
                 [[
                     InlineKeyboardButton("🎥 With Watermark", callback_data=f"tt_wm|{uid}"),
                     InlineKeyboardButton("🎥 Without Watermark", callback_data=f"tt_nowm|{uid}")
-                ]]
+                ],
+                 [
+                    InlineKeyboardButton("🎵 Audio (MP3)", callback_data=f"tt_mp3|{uid}")
+                 ]]
             )
 
             await message.reply_text(caption, reply_markup=buttons)
@@ -70,7 +74,8 @@ def register(app: Client):
         except Exception as e:
             await message.reply_text(f"⚠️ Error: {str(e)}")
 
-    @app.on_callback_query(filters.regex("^tt_"))
+    # ✅ Fixed regex to handle wm, nowm, mp3
+    @app.on_callback_query(filters.regex(r"^tt_(wm|nowm|mp3)\|"))
     async def callback_tiktok(client: Client, query: CallbackQuery):
         try:
             action, uid = query.data.split("|")
@@ -84,11 +89,25 @@ def register(app: Client):
                 VIDEO_CACHE.pop(uid, None)
                 return await query.answer("❌ This download link has expired!", show_alert=True)
 
-            video_url = video_entry["wm"] if action == "tt_wm" else video_entry["nowm"]
+            # ✅ Decide URL
+            if action == "tt_wm":
+                file_url = video_entry["wm"]
+                filename = f"tiktok_{uid}_wm.mp4"
+                send_type = "video"
+                caption = "✅ TikTok video (With Watermark)"
+            elif action == "tt_nowm":
+                file_url = video_entry["nowm"]
+                filename = f"tiktok_{uid}_nowm.mp4"
+                send_type = "video"
+                caption = "✅ TikTok video (Without Watermark)"
+            else:  # tt_mp3
+                file_url = video_entry["music"]
+                filename = f"tiktok_{uid}.mp3"
+                send_type = "audio"
+                caption = "🎵 TikTok Audio (MP3)"
 
-            # ✅ Stream download to avoid memory crash
-            filename = f"tiktok_{uid}.mp4"
-            with requests.get(video_url, stream=True) as r:
+            # ✅ Stream download
+            with requests.get(file_url, stream=True) as r:
                 with open(filename, "wb") as f:
                     for chunk in r.iter_content(chunk_size=1024 * 1024):
                         if chunk:
@@ -97,18 +116,31 @@ def register(app: Client):
             # Delete original "select download option" message
             await query.message.delete()
 
-            # ✅ Use client.send_video (not _client)
-            await client.send_video(
-                chat_id=query.message.chat.id,
-                video=filename,
-                caption=f"✅ Here is your TikTok video ({'With Watermark' if action=='tt_wm' else 'Without Watermark'})",
-                reply_markup=InlineKeyboardMarkup(
-                    [[
-                        InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2"),
-                        InlineKeyboardButton("🎵 Support Group", url="https://t.me/slmusicmania")
-                    ]]
+            # ✅ Send file depending on type
+            if send_type == "video":
+                await client.send_video(
+                    chat_id=query.message.chat.id,
+                    video=filename,
+                    caption=caption,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[
+                            InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2"),
+                            InlineKeyboardButton("🎵 Support Group", url="https://t.me/slmusicmania")
+                        ]]
+                    )
                 )
-            )
+            else:
+                await client.send_audio(
+                    chat_id=query.message.chat.id,
+                    audio=filename,
+                    caption=caption,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[
+                            InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2"),
+                            InlineKeyboardButton("🎵 Support Group", url="https://t.me/slmusicmania")
+                        ]]
+                    )
+                )
 
             os.remove(filename)
 
