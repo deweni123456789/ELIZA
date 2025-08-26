@@ -71,7 +71,7 @@ def register(app: Client):
             await message.reply_text(f"⚠️ Error: {str(e)}")
 
     @app.on_callback_query(filters.regex("^tt_"))
-    async def callback_tiktok(_, query: CallbackQuery):
+    async def callback_tiktok(client: Client, query: CallbackQuery):
         try:
             action, uid = query.data.split("|")
             video_entry = VIDEO_CACHE.get(uid)
@@ -85,17 +85,20 @@ def register(app: Client):
                 return await query.answer("❌ This download link has expired!", show_alert=True)
 
             video_url = video_entry["wm"] if action == "tt_wm" else video_entry["nowm"]
-            file_data = requests.get(video_url).content
-            filename = f"tiktok_{uid}.mp4"
 
-            with open(filename, "wb") as f:
-                f.write(file_data)
+            # ✅ Stream download to avoid memory crash
+            filename = f"tiktok_{uid}.mp4"
+            with requests.get(video_url, stream=True) as r:
+                with open(filename, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
 
             # Delete original "select download option" message
             await query.message.delete()
 
-            # Send video using client
-            await query._client.send_video(
+            # ✅ Use client.send_video (not _client)
+            await client.send_video(
                 chat_id=query.message.chat.id,
                 video=filename,
                 caption=f"✅ Here is your TikTok video ({'With Watermark' if action=='tt_wm' else 'Without Watermark'})",
