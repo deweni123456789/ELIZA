@@ -2,7 +2,6 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
 from modules.tiktok import register as register_tiktok
-from modules.instagram import register as register_instagram
 from modules.song import register as register_song
 from modules.video import register as register_video
 
@@ -35,7 +34,6 @@ async def callbacks(bot, query):
 register_song(app)
 register_video(app)
 register_tiktok(app)
-register_instagram(app)
 
 # ---- Run bot (Pyrogram v2 style)
 app.run()
