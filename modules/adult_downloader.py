@@ -1,6 +1,5 @@
 import os
 import re
-import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
@@ -9,10 +8,11 @@ from datetime import datetime
 _TEMP_DIR = "temp_ad_dl"
 os.makedirs(_TEMP_DIR, exist_ok=True)
 
-# Only URLs containing /adult will be processed
-ADULT_LINK_REGEX = re.compile(r"/adult", re.IGNORECASE)
+# Supported adult sites (with optional /adult path)
+ADULT_SITE_REGEX = re.compile(
+    r"(pornhub\.com|xvideos\.com|xnxx\.com|redtube\.com).*(/adult)?", re.IGNORECASE
+)
 
-# Inline keyboard template
 def get_inline_keyboard():
     return InlineKeyboardMarkup(
         [
@@ -26,31 +26,23 @@ def get_inline_keyboard():
         ]
     )
 
-# Utility to format numbers with commas
 def format_number(n):
     try:
         return f"{int(n):,}"
     except:
         return n
 
-# Main handler for adult video URLs
 async def adult_downloader_handler(client, message):
     if message.chat.type != "private":
-        await message.reply_text(
-            "❌ This service is available only in private chat.",
-            quote=True
-        )
+        await message.reply_text("❌ This service is only available in private chat.", quote=True)
         return
 
     url = message.text.strip()
-    if not ADULT_LINK_REGEX.search(url):
-        await message.reply_text(
-            "❌ This link does not appear to be an adult link.",
-            quote=True
-        )
+    if not ADULT_SITE_REGEX.search(url):
+        await message.reply_text("❌ This link is not a supported adult link.", quote=True)
         return
 
-    msg = await message.reply_text("⏳ Processing your adult link, please wait...")
+    msg = await message.reply_text("⏳ Processing your link, please wait...")
 
     ydl_opts = {
         "outtmpl": os.path.join(_TEMP_DIR, "%(title)s.%(ext)s"),
@@ -73,7 +65,6 @@ async def adult_downloader_handler(client, message):
             views = format_number(info.get("view_count", "Unknown"))
             comments = format_number(info.get("comment_count", "0"))
 
-            # Download the video
             filepath = ydl.prepare_filename(info)
             ydl.download([url])
 
@@ -86,11 +77,7 @@ async def adult_downloader_handler(client, message):
             f"\nRequested by: {message.from_user.mention}"
         )
 
-        await message.reply_video(
-            video=filepath,
-            caption=caption,
-            reply_markup=get_inline_keyboard()
-        )
+        await message.reply_video(video=filepath, caption=caption, reply_markup=get_inline_keyboard())
 
     except Exception as e:
         await msg.edit(f"❌ Failed to process your link.\nError: {e}")
@@ -99,6 +86,5 @@ async def adult_downloader_handler(client, message):
             os.remove(filepath)
         await msg.delete()
 
-# Register function for main.py
 def register_adult_downloader(app: Client):
     app.add_handler(filters.text & filters.private, adult_downloader_handler)
