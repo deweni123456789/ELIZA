@@ -239,6 +239,13 @@ async def handle_callbacks(app: Client, query: CallbackQuery):
         else:
             await query.answer("Unknown action.", show_alert=True)
             return
+
+        # ✅ delete the service/info msg after sending file
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+
     except Exception as e:
         await query.message.reply_text(
             f"❌ Download failed.\n<code>{e}</code>",
