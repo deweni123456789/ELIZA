@@ -1,18 +1,21 @@
+import os
+import re
 from pyrogram import Client, filters
-from pyrogram.types import Message
-import os, re, yt_dlp
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
+import yt_dlp
 from datetime import datetime
 
+# Temporary download folder
 _TEMP_DIR = "temp_ad_dl"
 os.makedirs(_TEMP_DIR, exist_ok=True)
 
 # Supported adult sites
 ADULT_SITE_REGEX = re.compile(
-    r"(pornhub\.com|xvideos\.com|xnxx\.com|redtube\.com)", re.IGNORECASE
+    r"(pornhub\.com|xvideos\.com|xnxx\.com|xhamster\.com)", re.IGNORECASE
 )
 
+# Inline keyboard
 def get_inline_keyboard():
-    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     return InlineKeyboardMarkup(
         [
             [
@@ -25,6 +28,7 @@ def get_inline_keyboard():
         ]
     )
 
+# Format numbers like 1,234,567
 def format_number(n):
     try:
         return f"{int(n):,}"
@@ -36,9 +40,9 @@ def register_adult_downloader(app: Client):
     async def adult_downloader_handler(client: Client, message: Message):
         url = message.text.strip()
         
+        # Check if message contains a supported adult link
         if not ADULT_SITE_REGEX.search(url):
-            # Not an adult link, ignore
-            return
+            return  # Ignore non-adult links
 
         msg = await message.reply_text("⏳ Processing your link, please wait...")
 
@@ -63,6 +67,7 @@ def register_adult_downloader(app: Client):
                 views = format_number(info.get("view_count", "Unknown"))
                 comments = format_number(info.get("comment_count", "0"))
 
+                # Download video
                 filepath = ydl.prepare_filename(info)
                 ydl.download([url])
 
@@ -75,7 +80,11 @@ def register_adult_downloader(app: Client):
                 f"\nRequested by: {message.from_user.mention}"
             )
 
-            await message.reply_video(video=filepath, caption=caption, reply_markup=get_inline_keyboard())
+            await message.reply_video(
+                video=filepath,
+                caption=caption,
+                reply_markup=get_inline_keyboard()
+            )
 
         except Exception as e:
             await msg.edit(f"❌ Failed to process your link.\nError: {e}")
