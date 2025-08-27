@@ -3,6 +3,7 @@ import os
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 import yt_dlp
+import asyncio
 
 _TEMP_DIR = "temp_ad_dl"
 os.makedirs(_TEMP_DIR, exist_ok=True)
@@ -19,21 +20,22 @@ def register(app):
         url = message.command[1]
         requester = message.from_user.mention
 
-        msg = await message.reply_text("⏳ Downloading... Please wait.")
-
-        ydl_opts = {
-            'format': 'best',
-            'outtmpl': os.path.join(_TEMP_DIR, '%(title)s.%(ext)s'),
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': True,
-        }
+        status_msg = await message.reply_text("⏳ Downloading video... Please wait!")
 
         file_path = None
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                file_path = ydl.prepare_filename(info)
+            # yt-dlp options
+            ydl_opts = {
+                'format': 'best',
+                'outtmpl': os.path.join(_TEMP_DIR, '%(title)s.%(ext)s'),
+                'noplaylist': True,
+                'quiet': True,
+                'no_warnings': True,
+            }
+
+            loop = asyncio.get_event_loop()
+            info = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(url, download=True))
+            file_path = yt_dlp.YoutubeDL(ydl_opts).prepare_filename(info)
 
             caption = f"🎬 Title: {info.get('title', 'N/A')}\n" \
                       f"👤 Channel: {info.get('uploader', 'N/A')}\n" \
@@ -50,10 +52,10 @@ def register(app):
                     [[InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEV_USERNAME}")]]
                 )
             )
-            await msg.delete()
+            await status_msg.delete()
 
         except Exception as e:
-            await msg.edit(f"❌ Failed to download.\nError: {e}")
+            await status_msg.edit(f"❌ Failed to download.\nError: {e}")
         finally:
             if file_path and os.path.exists(file_path):
                 os.remove(file_path)
