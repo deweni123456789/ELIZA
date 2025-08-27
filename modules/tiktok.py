@@ -12,21 +12,20 @@ from pyrogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton
 )
+from pyrogram.enums import ChatAction
 
-# ---- You need yt-dlp
-# requirements.txt -> yt-dlp>=2024.07.07
 from yt_dlp import YoutubeDL
 
-# ---- Simple in-memory cache (token -> url)
+# ---- Cache for callback tokens
 _URL_CACHE: Dict[str, str] = {}
 
-# ---- Regex to catch TikTok links (includes short links)
+# ---- Regex to match TikTok links
 TIKTOK_REGEX = re.compile(
     r"(https?://(?:www\.)?(?:vm\.|vt\.)?tiktok\.com/[^\s]+|https?://(?:(?:www\.)?tiktok\.com)/@[A-Za-z0-9._-]+/video/\d+)",
     re.IGNORECASE
 )
 
-DEV_USERNAME = "deweni2"  # <- change if needed
+DEV_USERNAME = "deweni2"  # <- developer username
 
 
 # ---------------------- Helper functions ----------------------
@@ -34,13 +33,11 @@ DEV_USERNAME = "deweni2"  # <- change if needed
 def _format_date(ts: Optional[int]) -> str:
     if not ts:
         return "Unknown"
-    # Convert unix timestamp to yyyy-mm-dd
     return dt.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
 
 def _human(n: Optional[int]) -> str:
     if n is None:
         return "0"
-    # compact number (e.g., 1.2K, 3.4M)
     for unit in ["", "K", "M", "B", "T"]:
         if abs(n) < 1000:
             return f"{n:.0f}{unit}"
@@ -69,20 +66,11 @@ def _build_info_caption(info: dict, requester_mention: str) -> str:
     return "\n".join(lines)
 
 def _choice_keyboard(token: str) -> InlineKeyboardMarkup:
-    # callback_data must be short; we keep a token->url map
     rows = [
-        [
-            InlineKeyboardButton("✅ Download (No Watermark)", callback_data=f"tt|nowm|{token}"),
-        ],
-        [
-            InlineKeyboardButton("💧 Download (With Watermark)", callback_data=f"tt|wm|{token}"),
-        ],
-        [
-            InlineKeyboardButton("🎧 Download Audio (MP3)", callback_data=f"tt|aud|{token}"),
-        ],
-        [
-            InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEV_USERNAME}")
-        ]
+        [InlineKeyboardButton("✅ Download (No Watermark)", callback_data=f"tt|nowm|{token}")],
+        [InlineKeyboardButton("💧 Download (With Watermark)", callback_data=f"tt|wm|{token}")],
+        [InlineKeyboardButton("🎧 Download Audio (MP3)", callback_data=f"tt|aud|{token}")],
+        [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEV_USERNAME}")]
     ]
     return InlineKeyboardMarkup(rows)
 
@@ -93,21 +81,12 @@ def _dev_only_keyboard() -> InlineKeyboardMarkup:
 
 async def _ydl_extract(url: str) -> dict:
     def run():
-        ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "noplaylist": True,
-        }
+        ydl_opts = {"quiet": True, "no_warnings": True, "skip_download": True, "noplaylist": True}
         with YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False)
     return await asyncio.to_thread(run)
 
 async def _ydl_download_video(url: str, watermark: bool) -> Tuple[str, Optional[str]]:
-    """
-    Returns: (filepath, ext) for the video file.
-    We try to toggle watermark via extractor_args. If unsupported, yt-dlp still gets the best video.
-    """
     token = uuid.uuid4().hex[:8]
     outtmpl = os.path.join("temp", f"tt_{token}.%(ext)s")
     os.makedirs("temp", exist_ok=True)
@@ -119,19 +98,15 @@ async def _ydl_download_video(url: str, watermark: bool) -> Tuple[str, Optional[
             "no_warnings": True,
             "noplaylist": True,
             "merge_output_format": "mp4",
-            "format": "bv*+ba/b",  # best video+audio or best
+            "format": "bv*+ba/b",
         }
-        # Attempt to prefer watermarked URL (download_addr) when requested.
-        # If yt-dlp ignores this, you still get a valid file.
         if watermark:
             ydl_opts["extractor_args"] = {"tiktok": {"download_addr": ["1"]}}
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
-            # ensure final extension is mp4 if merged
             base, ext = os.path.splitext(filename)
             if ext.lower() not in [".mp4", ".mkv", ".mov", ".webm"]:
-                # Try to locate best candidate with mp4
                 candidate = base + ".mp4"
                 if os.path.exists(candidate):
                     filename = candidate
@@ -161,7 +136,6 @@ async def _ydl_download_audio(url: str) -> Tuple[str, Optional[str]]:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
-            # After postprocess, extension becomes .mp3
             base, _ = os.path.splitext(filename)
             mp3 = base + ".mp3"
             return (mp3 if os.path.exists(mp3) else filename), "mp3"
@@ -175,17 +149,12 @@ def _first_tiktok_url(text: str) -> Optional[str]:
 # ---------------------- Public API ----------------------
 
 def register(app: Client):
-    """
-    Call this in main.py to register the TikTok handlers.
-    """
-
     @app.on_message(filters.text & (filters.private | filters.group))
     async def tiktok_catcher(_, message: Message):
         url = _first_tiktok_url(message.text or "")
         if not url:
-            return  # ignore non-tiktok messages
+            return
 
-        # Extract info (no download yet)
         try:
             info = await _ydl_extract(url)
         except Exception as e:
@@ -196,7 +165,6 @@ def register(app: Client):
             )
             return
 
-        # Save token -> url for callbacks
         token = uuid.uuid4().hex[:10]
         _URL_CACHE[token] = url
 
@@ -219,7 +187,6 @@ def register(app: Client):
                     disable_web_page_preview=True
                 )
         except Exception:
-            # Fallback without thumb if remote thumb fails
             await message.reply_text(
                 caption,
                 quote=True,
@@ -227,16 +194,14 @@ def register(app: Client):
                 disable_web_page_preview=True
             )
 
-# Exported so main.py can delegate callback queries here
-async def handle_callbacks(app: Client, query: CallbackQuery):
-    """
-    Main callback dispatcher for tiktok buttons.
-    In main.py's on_callback_query, call: await handle_callbacks(app, query)
-    """
-    if not query.data or not query.data.startswith("tt|"):
-        return  # not ours
 
-    parts = query.data.split("|", 2)  # tt|action|token
+# ---------------------- Callback Handler ----------------------
+
+async def handle_callbacks(app: Client, query: CallbackQuery):
+    if not query.data or not query.data.startswith("tt|"):
+        return
+
+    parts = query.data.split("|", 2)
     if len(parts) != 3:
         await query.answer("Invalid request.", show_alert=True)
         return
@@ -247,30 +212,27 @@ async def handle_callbacks(app: Client, query: CallbackQuery):
         await query.answer("Session expired. Send the TikTok link again.", show_alert=True)
         return
 
-    # Acknowledge quickly
     try:
         await query.answer("Processing…")
     except Exception:
         pass
 
-    await query.message.reply_chat_action("upload_video" if action in ("wm", "nowm") else "upload_audio")
+    await query.message.reply_chat_action(
+        ChatAction.UPLOAD_VIDEO if action in ("wm", "nowm") else ChatAction.UPLOAD_AUDIO
+    )
 
     try:
         if action == "aud":
             filepath, ext = await _ydl_download_audio(url)
-            caption = f"🎧 TikTok Audio\n\nRequested by {query.from_user.mention if query.from_user else 'user'}"
             await query.message.reply_audio(
                 audio=filepath,
-                caption=caption,
                 reply_markup=_dev_only_keyboard()
             )
         elif action in ("wm", "nowm"):
             want_wm = (action == "wm")
             filepath, ext = await _ydl_download_video(url, watermark=want_wm)
-            caption = f"🎬 TikTok Video ({'With' if want_wm else 'No'} Watermark)\n\nRequested by {query.from_user.mention if query.from_user else 'user'}"
             await query.message.reply_video(
                 video=filepath,
-                caption=caption,
                 reply_markup=_dev_only_keyboard(),
                 supports_streaming=True
             )
@@ -283,12 +245,10 @@ async def handle_callbacks(app: Client, query: CallbackQuery):
             reply_markup=_dev_only_keyboard()
         )
     finally:
-        # Cleanup file and forget token if possible
         try:
             if 'filepath' in locals() and isinstance(filepath, str) and os.path.exists(filepath):
                 os.remove(filepath)
         except Exception:
             pass
 
-        # clear token to avoid growth
         _URL_CACHE.pop(token, None)
