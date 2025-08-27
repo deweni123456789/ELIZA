@@ -1,9 +1,7 @@
 # modules/adult_downloader.py
 import os
-import asyncio
 from pyrogram import filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.types import Message
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 import yt_dlp
 
 _TEMP_DIR = "temp_ad_dl"
@@ -13,7 +11,7 @@ DEV_USERNAME = "deweni2"
 
 def register(app):
 
-    @app.on_message(filters.command("adult") & filters.private)
+    @app.on_message(filters.command("adult"))
     async def adult_download(_, message: Message):
         if len(message.command) < 2:
             return await message.reply_text("❌ Please provide a link.\nUsage: `/adult <link>`")
@@ -31,6 +29,7 @@ def register(app):
             'no_warnings': True,
         }
 
+        file_path = None
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -56,6 +55,5 @@ def register(app):
         except Exception as e:
             await msg.edit(f"❌ Failed to download.\nError: {e}")
         finally:
-            # cleanup
-            if os.path.exists(file_path):
+            if file_path and os.path.exists(file_path):
                 os.remove(file_path)
