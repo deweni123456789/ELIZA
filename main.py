@@ -37,7 +37,7 @@ async def callbacks(bot, query):
 register_song(app)
 register_video(app)
 register_tiktok(app)
-register_downloader(app)
+register_adult_downloader(app)
 
 # ---- Run bot (Pyrogram v2 style)
 app.run()
