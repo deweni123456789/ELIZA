@@ -1,4 +1,5 @@
 import os
+import re
 import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -7,6 +8,11 @@ from datetime import datetime
 
 _TEMP_DIR = "temp_ad_dl"
 os.makedirs(_TEMP_DIR, exist_ok=True)
+
+# Supported adult site patterns (regex)
+ADULT_SITE_REGEX = re.compile(
+    r"(pornhub\.com|xvideos\.com|xnxx\.com|redtube\.com|tube8\.com|youporn\.com)", re.IGNORECASE
+)
 
 # Inline keyboard template
 def get_inline_keyboard():
@@ -39,6 +45,13 @@ async def adult_downloader_handler(client, message):
         return
 
     url = message.text.strip()
+    if not ADULT_SITE_REGEX.search(url):
+        await message.reply_text(
+            "❌ This link is not from a supported adult site.",
+            quote=True
+        )
+        return
+
     msg = await message.reply_text("⏳ Processing your link, please wait...")
 
     ydl_opts = {
@@ -49,19 +62,19 @@ async def adult_downloader_handler(client, message):
         "nocheckcertificate": True,
     }
 
+    filepath = None
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             title = info.get("title", "Unknown")
             uploader = info.get("uploader", "Unknown")
             upload_date = info.get("upload_date", "")
-            upload_time = ""
             if upload_date:
                 dt = datetime.strptime(upload_date, "%Y%m%d")
                 upload_date = dt.strftime("%Y-%m-%d")
             views = format_number(info.get("view_count", "Unknown"))
             comments = format_number(info.get("comment_count", "0"))
-            
+
             # Download the video
             filepath = ydl.prepare_filename(info)
             ydl.download([url])
@@ -84,11 +97,10 @@ async def adult_downloader_handler(client, message):
     except Exception as e:
         await msg.edit(f"❌ Failed to process your link.\nError: {e}")
     finally:
-        # Cleanup temp files
-        if os.path.exists(filepath):
+        if filepath and os.path.exists(filepath):
             os.remove(filepath)
         await msg.delete()
-        
+
 # Register function for main.py
 def register_adult_downloader(app: Client):
     app.add_handler(filters.text & filters.private, adult_downloader_handler)
