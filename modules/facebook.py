@@ -14,9 +14,9 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 
 
 def register(app):
-    @app.on_message(filters.command(["fb", "facebook"], prefixes=["/", "!", "."]))
+    @app.on_message(filters.command(["fb", "facebook"], prefixes=["/"]))
     async def fb_handler(client, message: Message):
-        # --- Get URL
+        # --- URL ගන්න
         url = None
         if len(message.command) > 1:
             url = message.text.split(maxsplit=1)[1]
@@ -26,20 +26,23 @@ def register(app):
                 url = txt.strip()
 
         if not url:
-            await message.reply_text("⚠️ Please send a valid Facebook video link.\n\nUsage:\n`/fb <link>`")
+            await message.reply_text(
+                "⚠️ Please send a valid Facebook video link.\n\nUsage:\n`/fb <link>`",
+                quote=True
+            )
             return
 
-        status = await message.reply_text("🔎 Downloading Facebook video...")
+        status = await message.reply_text("🔎 Downloading Facebook video...", quote=True)
         await client.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
 
+        # temp dir + yt-dlp options
         tmpdir = tempfile.mkdtemp(prefix="fb_", dir=TEMP_DIR)
         outtmpl = os.path.join(tmpdir, "%(title)s.%(ext)s")
-
         ydl_opts = {
             "outtmpl": outtmpl,
             "format": "best[ext=mp4]/best",
-            "quiet": True,
             "merge_output_format": "mp4",
+            "quiet": True,
         }
 
         try:
