@@ -1,14 +1,14 @@
-# modules/adult_downloader.py
 import os
-import re
 import requests
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 
+DEV_USERNAME = "deweni2"
 _TEMP_DIR = "temp_ad_dl"
 os.makedirs(_TEMP_DIR, exist_ok=True)
 
-DEV_USERNAME = "deweni2"
+# Replace this with your API endpoint
+API_ENDPOINT = "https://example-adult-api.com/download"
 
 def register(app):
 
@@ -22,32 +22,24 @@ def register(app):
 
         status_msg = await message.reply_text("⏳ Fetching video... Please wait!")
 
-        file_path = None
         try:
-            # Detect site and extract direct video URL
-            if "xvideos.com" in url:
-                resp = requests.get(url)
-                match = re.search(r'html5player.setVideoUrlHigh\(\'(.*?)\'\)', resp.text)
-                video_url = match.group(1) if match else None
-                title_match = re.search(r'<title>(.*?) - Xvideos', resp.text)
-                title = title_match.group(1) if title_match else "Video"
+            # Call API
+            resp = requests.get(API_ENDPOINT, params={"url": url})
+            if resp.status_code != 200:
+                return await status_msg.edit("❌ Failed to fetch video from API.")
 
-            elif "pornhub.com" in url:
-                resp = requests.get(url)
-                match = re.search(r'"videoUrl":"(.*?)"', resp.text)
-                video_url = match.group(1).replace("\\u0026","&") if match else None
-                title_match = re.search(r'<title>(.*?) - Pornhub', resp.text)
-                title = title_match.group(1) if title_match else "Video"
-
-            else:
-                await status_msg.edit("❌ Site not supported yet.")
-                return
+            data = resp.json()
+            video_url = data.get("video_url")
+            title = data.get("title", "Video")
+            uploader = data.get("uploader", "Unknown")
+            views = data.get("views", "N/A")
+            likes = data.get("likes", "N/A")
+            comments = data.get("comments", "N/A")
 
             if not video_url:
-                await status_msg.edit("❌ Could not extract video URL.")
-                return
+                return await status_msg.edit("❌ Video URL not found in API response.")
 
-            # Download video
+            # Download video to temp dir
             file_path = os.path.join(_TEMP_DIR, f"{title}.mp4")
             with requests.get(video_url, stream=True) as r:
                 r.raise_for_status()
@@ -55,7 +47,14 @@ def register(app):
                     for chunk in r.iter_content(chunk_size=8192):
                         f.write(chunk)
 
-            caption = f"🎬 Title: {title}\n👤 Requested by: {requester}"
+            caption = (
+                f"🎬 Title: {title}\n"
+                f"👤 Uploader: {uploader}\n"
+                f"👁 Views: {views}\n"
+                f"👍 Likes: {likes}\n"
+                f"💬 Comments: {comments}\n"
+                f"👤 Requested by: {requester}"
+            )
 
             await message.reply_video(
                 video=file_path,
@@ -67,7 +66,7 @@ def register(app):
             await status_msg.delete()
 
         except Exception as e:
-            await status_msg.edit(f"❌ Failed to download.\nError: {e}")
+            await status_msg.edit(f"❌ Failed to download video.\nError: {e}")
         finally:
-            if file_path and os.path.exists(file_path):
+            if "file_path" in locals() and os.path.exists(file_path):
                 os.remove(file_path)
