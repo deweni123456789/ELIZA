@@ -2,7 +2,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
 from modules.tiktok import register as register_tiktok, handle_callbacks as tiktok_callbacks
-from modules.adult_downloader import register as register_adult, handle_callback as adult_handle_callback
+from modules.adult_downloader import register as register_downloader
 from modules.song import register as register_song
 from modules.video import register as register_video
 
