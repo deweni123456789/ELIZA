@@ -7,7 +7,7 @@ from pyrogram.enums import ChatAction
 import yt_dlp
 
 # ---------- Config ----------
-DEV_USERNAME = "deweni2"
+DEV_USERNAME = "deweni2"  # change to your Telegram username
 _TEMP_DIR = "temp_ad_dl"
 os.makedirs(_TEMP_DIR, exist_ok=True)
 
@@ -16,12 +16,13 @@ _URL_CACHE = {}  # token -> url
 ADULT_DOMAINS = ["pornhub.com", "xvideos.com", "xnxx.com", "xhamster.com"]
 ADULT_REGEX = r"(https?://[^\s]*?(?:pornhub\.com|xvideos\.com|xnxx\.com|xhamster\.com)[^\s]*)"
 
+# ---------- Helper Keyboard ----------
 def _dev_keyboard():
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEV_USERNAME}")]]
     )
 
-# ---------------- Download Video ----------------
+# ---------- Download Video ----------
 async def _ydl_download_video(url: str):
     loop = asyncio.get_running_loop()
     token = secrets.token_hex(6)
@@ -42,7 +43,7 @@ async def _ydl_download_video(url: str):
 
     return await loop.run_in_executor(None, run)
 
-# ---------------- Handlers ----------------
+# ---------- Private Chat Handler ----------
 async def handle_private(client: Client, message: Message, url: str):
     token = secrets.token_hex(6)
     _URL_CACHE[token] = url
@@ -58,6 +59,7 @@ async def handle_private(client: Client, message: Message, url: str):
         quote=True
     )
 
+# ---------- Callback Handler ----------
 async def handle_callback(client: Client, query: CallbackQuery):
     if not query.data or not query.data.startswith("dl|"):
         return
@@ -85,7 +87,6 @@ async def handle_callback(client: Client, query: CallbackQuery):
                 reply_markup=_dev_keyboard(),
                 supports_streaming=True
             )
-
             # delete service/info message
             try:
                 await query.message.delete()
@@ -102,9 +103,8 @@ async def handle_callback(client: Client, query: CallbackQuery):
             os.remove(filepath)
         _URL_CACHE.pop(token, None)
 
-# ---------------- Register ----------------
+# ---------- Register Module ----------
 def register(app: Client):
-
     # Private chat: actual download
     @app.on_message(filters.private & filters.regex(ADULT_REGEX))
     async def private_handler(client, message: Message):
