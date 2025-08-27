@@ -9,10 +9,8 @@ from datetime import datetime
 _TEMP_DIR = "temp_ad_dl"
 os.makedirs(_TEMP_DIR, exist_ok=True)
 
-# Supported adult site patterns (regex)
-ADULT_SITE_REGEX = re.compile(
-    r"(pornhub\.com|xvideos\.com|xnxx\.com|redtube\.com|tube8\.com|youporn\.com)", re.IGNORECASE
-)
+# Only URLs containing /adult will be processed
+ADULT_LINK_REGEX = re.compile(r"/adult", re.IGNORECASE)
 
 # Inline keyboard template
 def get_inline_keyboard():
@@ -45,14 +43,14 @@ async def adult_downloader_handler(client, message):
         return
 
     url = message.text.strip()
-    if not ADULT_SITE_REGEX.search(url):
+    if not ADULT_LINK_REGEX.search(url):
         await message.reply_text(
-            "❌ This link is not from a supported adult site.",
+            "❌ This link does not appear to be an adult link.",
             quote=True
         )
         return
 
-    msg = await message.reply_text("⏳ Processing your link, please wait...")
+    msg = await message.reply_text("⏳ Processing your adult link, please wait...")
 
     ydl_opts = {
         "outtmpl": os.path.join(_TEMP_DIR, "%(title)s.%(ext)s"),
