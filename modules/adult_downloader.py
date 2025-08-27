@@ -1,9 +1,9 @@
 # modules/adult_downloader.py
 import os
+import re
+import requests
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
-import yt_dlp
-import asyncio
 
 _TEMP_DIR = "temp_ad_dl"
 os.makedirs(_TEMP_DIR, exist_ok=True)
@@ -20,30 +20,42 @@ def register(app):
         url = message.command[1]
         requester = message.from_user.mention
 
-        status_msg = await message.reply_text("⏳ Downloading video... Please wait!")
+        status_msg = await message.reply_text("⏳ Fetching video... Please wait!")
 
         file_path = None
         try:
-            # yt-dlp options
-            ydl_opts = {
-                'format': 'best',
-                'outtmpl': os.path.join(_TEMP_DIR, '%(title)s.%(ext)s'),
-                'noplaylist': True,
-                'quiet': True,
-                'no_warnings': True,
-            }
+            # Detect site and extract direct video URL
+            if "xvideos.com" in url:
+                resp = requests.get(url)
+                match = re.search(r'html5player.setVideoUrlHigh\(\'(.*?)\'\)', resp.text)
+                video_url = match.group(1) if match else None
+                title_match = re.search(r'<title>(.*?) - Xvideos', resp.text)
+                title = title_match.group(1) if title_match else "Video"
 
-            loop = asyncio.get_event_loop()
-            info = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(url, download=True))
-            file_path = yt_dlp.YoutubeDL(ydl_opts).prepare_filename(info)
+            elif "pornhub.com" in url:
+                resp = requests.get(url)
+                match = re.search(r'"videoUrl":"(.*?)"', resp.text)
+                video_url = match.group(1).replace("\\u0026","&") if match else None
+                title_match = re.search(r'<title>(.*?) - Pornhub', resp.text)
+                title = title_match.group(1) if title_match else "Video"
 
-            caption = f"🎬 Title: {info.get('title', 'N/A')}\n" \
-                      f"👤 Channel: {info.get('uploader', 'N/A')}\n" \
-                      f"👁 Views: {info.get('view_count', 'N/A')}\n" \
-                      f"👍 Likes: {info.get('like_count', 'N/A')}\n" \
-                      f"👎 Dislikes: {info.get('dislike_count', 'N/A')}\n" \
-                      f"💬 Comments: {info.get('comment_count', 'N/A')}\n" \
-                      f"👤 Requested by: {requester}"
+            else:
+                await status_msg.edit("❌ Site not supported yet.")
+                return
+
+            if not video_url:
+                await status_msg.edit("❌ Could not extract video URL.")
+                return
+
+            # Download video
+            file_path = os.path.join(_TEMP_DIR, f"{title}.mp4")
+            with requests.get(video_url, stream=True) as r:
+                r.raise_for_status()
+                with open(file_path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+
+            caption = f"🎬 Title: {title}\n👤 Requested by: {requester}"
 
             await message.reply_video(
                 video=file_path,
