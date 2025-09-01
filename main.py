@@ -4,7 +4,6 @@ import config
 from modules.tiktok import register as register_tiktok, handle_callbacks as tiktok_callbacks
 from modules.youtube import register as register_youtube, handle_callbacks as youtube_callbacks
 from modules.song import register as register_song
-from modules.adult import register as register_adult
 from modules.video import register as register_video
 
 app = Client(
@@ -40,7 +39,6 @@ register_song(app)
 register_video(app)
 register_tiktok(app)
 register_youtube(app)
-register_adult(app)
 
 # ---- Run bot
 app.run()
