@@ -2,7 +2,6 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
 from modules.tiktok import register as register_tiktok, handle_callbacks as tiktok_callbacks
-from modules.youtube import register as register_youtube, handle_callbacks as youtube_callbacks
 from modules.song import register as register_song
 from modules.video import register as register_video
 
@@ -38,7 +37,6 @@ async def callbacks(bot, query):
 register_song(app)
 register_video(app)
 register_tiktok(app)
-register_youtube(app)
 
 # ---- Run bot
 app.run()
