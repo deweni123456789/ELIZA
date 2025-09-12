@@ -1,6 +1,7 @@
 import os
 import re
 import yt_dlp
+import requests
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
@@ -86,7 +87,19 @@ def register(app):
         age_limit = info.get("age_limit", 0)
         age_restricted = "Yes 🔞" if age_limit and age_limit >= 18 else "No"
 
+        # --- Download thumbnail (local file) ---
+        thumb_path = None
         thumbnail_url = info.get("thumbnail")
+        if thumbnail_url:
+            try:
+                thumb_path = f"downloads/thumb_{info.get('id')}.jpg"
+                r = requests.get(thumbnail_url, stream=True, timeout=10)
+                if r.status_code == 200:
+                    with open(thumb_path, "wb") as f:
+                        for chunk in r.iter_content(1024):
+                            f.write(chunk)
+            except Exception:
+                thumb_path = None
 
         # --- Caption ---
         caption = (
@@ -137,11 +150,13 @@ def register(app):
                 chat_id=message.chat.id,
                 audio=file_path,
                 caption=caption,
-                thumb=thumbnail_url,   # ✅ Add YouTube thumbnail as cover art
+                thumb=thumb_path if thumb_path else None,  # ✅ now using local thumbnail
                 reply_markup=reply_markup
             )
         finally:
             if os.path.exists(file_path):
                 os.remove(file_path)
+            if thumb_path and os.path.exists(thumb_path):
+                os.remove(thumb_path)
 
         await status.delete()
