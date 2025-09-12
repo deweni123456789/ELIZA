@@ -9,7 +9,7 @@ from typing import Optional
 import yt_dlp
 from pyrogram import filters
 from pyrogram.enums import ParseMode
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputFile
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # -----------------------
 def format_number(v) -> str:
@@ -195,9 +195,9 @@ def register(app):
             try: await status_msg.delete()
             except: pass
 
-            audio_file = InputFile(mp3_file)
+            # ✅ Pyrogram 3.x uses direct file path
             await message.reply_audio(
-                audio=audio_file,
+                audio=mp3_file,
                 caption=caption,
                 parse_mode=ParseMode.HTML,
                 reply_markup=keyboard,
