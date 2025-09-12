@@ -4,7 +4,7 @@ import yt_dlp
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
-from datetime import datetime  # << add this
+from datetime import datetime, timedelta
 
 def register(app):
     def sanitize_filename(name):
@@ -63,15 +63,40 @@ def register(app):
         except:
             upload_date = upload_date_raw
 
+        # --- Uploaded time ---
+        upload_time = info.get("release_date") or "N/A"
+
+        # --- Length formatting ---
+        duration_sec = info.get("duration")
+        if duration_sec:
+            length_str = str(timedelta(seconds=duration_sec))
+        else:
+            length_str = "N/A"
+
+        # --- File size ---
+        filesize = info.get("filesize_approx") or info.get("filesize") or 0
+        if filesize:
+            size_mb = round(filesize / (1024 * 1024), 2)
+            file_size_str = f"{size_mb} MB"
+        else:
+            file_size_str = "N/A"
+
+        # --- Caption ---
         caption = (
             f"🎵 **Title:** {info.get('title')}\n"
             f"📺 **Channel:** {info.get('uploader')}\n"
+            f"📂 **Category:** {info.get('categories', ['N/A'])[0]}\n"
             f"📅 **Upload Date:** {upload_date}\n"
-            f"⏱ **Duration:** {info.get('duration')} sec\n"
+            f"🕒 **Uploaded Time:** {upload_time}\n"
+            f"⏱ **Duration:** {length_str}\n"
             f"👁 **Views:** {info.get('view_count')}\n"
             f"👍 **Likes:** {info.get('like_count','N/A')}\n"
-            f"💬 **Comments:** {info.get('comment_count','N/A')}\n\n"
-            f"🙋‍♂️ **Requested by:** {message.from_user.mention}"
+            f"👎 **Dislikes:** N/A\n"
+            f"💬 **Comments:** {info.get('comment_count','N/A')}\n"
+            f"📦 **File Size:** {file_size_str}\n\n"
+            f"🔗 [Watch on YouTube]({info.get('webpage_url')})\n\n"
+            f"🙋‍♂️ **Requested by:** {message.from_user.mention}\n"
+            f"🤖 **Uploaded by:** {config.BOT_NAME}"
         )
 
         try:
@@ -80,12 +105,18 @@ def register(app):
                 audio=file_path,
                 caption=caption,
                 reply_markup=InlineKeyboardMarkup(
-                    [[
-                        InlineKeyboardButton(
-                            "👨‍💻 Developer",
-                            url=f"https://t.me/{config.DEVELOPER.replace('@','')}"
-                        )
-                    ]]
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "👨‍💻 Developer",
+                                url=f"https://t.me/{config.DEVELOPER.replace('@','')}"
+                            ),
+                            InlineKeyboardButton(
+                                "🎵 Support Group",
+                                url="https://t.me/slmusicmania"
+                            )
+                        ]
+                    ]
                 )
             )
         finally:
