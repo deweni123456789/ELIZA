@@ -3,6 +3,7 @@ import io
 import shutil
 import subprocess
 import asyncio
+from pyrogram import filters
 from datetime import datetime, timezone
 from typing import Optional
 
