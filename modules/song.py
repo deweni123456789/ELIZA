@@ -1,175 +1,192 @@
 import os
-import yt_dlp
+import io
+import shutil
+import subprocess
 import asyncio
 from datetime import datetime, timezone
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
-import shutil
+from typing import Optional
 
-MAIN_LOOP = None
+import yt_dlp
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram import Client, types
 
-def set_main_loop(loop):
-    global MAIN_LOOP
-    MAIN_LOOP = loop
-
-async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        msg = await update.message.reply_text("Usage: /song <YouTube URL or keywords>")
-        await asyncio.sleep(10)
-        await msg.delete()
-        return
-
-    query = " ".join(context.args)
-
-    # URL or search
-    if query.startswith("http://") or query.startswith("https://"):
-        url = query
-    else:
-        url = f"ytsearch1:{query}"
-
-    status_msg = await update.message.reply_text("🎵 Downloading audio, please wait...")
-
-    os.makedirs("downloads", exist_ok=True)
-
-    # FFmpeg check
-    if not shutil.which("ffmpeg"):
-        await status_msg.edit_text(
-            "❌ FFmpeg is not installed or not in PATH.\n"
-            "➡️ Please install FFmpeg from https://ffmpeg.org/download.html"
-        )
-        await asyncio.sleep(10)
-        await status_msg.delete()
-        return
-
-    # cookies.txt check
-    cookie_path = "modules/cookies.txt"
-    if not os.path.exists(cookie_path):
-        cookie_path = None
-
-    # yt-dlp options
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': 'downloads/%(title)s.%(ext)s',
-        'postprocessors': [
-            {
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }
-        ],
-        'postprocessor_args': ['-ar', '44100'],
-        'prefer_ffmpeg': True,
-        'quiet': True,
-        'nocheckcertificate': True,
-        'noplaylist': True,
-        'geo_bypass': True,
-        'extractor_args': {
-            'youtube': {'player_client': ['ios', 'android', 'tv', 'web_creator']}
-        }
-    }
-
-    if cookie_path:
-        ydl_opts['cookiefile'] = cookie_path
-
-    loop = MAIN_LOOP or asyncio.get_event_loop()
-
-    def download_audio():
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                if not info:
-                    return None, None
-                base = ydl.prepare_filename(info)
-                mp3_file = os.path.splitext(base)[0] + ".mp3"
-                if not os.path.exists(mp3_file):
-                    for f in os.listdir("downloads"):
-                        if f.lower().endswith(".mp3"):
-                            mp3_file = os.path.join("downloads", f)
-                            break
-                if not os.path.exists(mp3_file):
-                    return None, None
-                return info, mp3_file
-        except Exception as e:
-            print(f"Download Error: {e}")
-            return None, None
-
-    info, file_path = await loop.run_in_executor(None, download_audio)
-
-    if not info or not file_path or not os.path.exists(file_path):
-        await status_msg.edit_text(
-            "❌ Failed: Audio file could not be created.\n"
-            "➡️ Make sure FFmpeg is installed and cookies.txt exists if needed."
-        )
-        await asyncio.sleep(10)
-        await status_msg.delete()
-        return
-
-    # Extract metadata
-    title = info.get("title", "Unknown Title")
-    uploader = info.get("uploader", "Unknown Channel")
-    views = info.get("view_count", 0)
-    likes = info.get("like_count", "N/A")
-    dislikes = info.get("dislike_count", "N/A")
-    comments = info.get("comment_count", "N/A")
-    duration = info.get("duration", 0)  # seconds
-    upload_date = info.get("upload_date")  # format YYYYMMDD
-    video_id = info.get("id")
-    video_url = f"https://youtu.be/{video_id}" if video_id else "N/A"
-    category = info.get("categories", ["N/A"])[0]
-
-    # Format duration mm:ss
-    if duration:
-        mins, secs = divmod(duration, 60)
-        hours, mins = divmod(mins, 60)
-        length_str = f"{hours:02d}:{mins:02d}:{secs:02d}" if hours else f"{mins:02d}:{secs:02d}"
-    else:
-        length_str = "N/A"
-
-    # Format upload date
-    if upload_date:
-        try:
-            dt = datetime.strptime(upload_date, "%Y%m%d").replace(tzinfo=timezone.utc)
-            date_str = dt.strftime("%Y/%m/%d")
-            time_str = dt.strftime("%H:%M:%S")
-        except Exception:
-            date_str, time_str = "N/A", "N/A"
-    else:
-        date_str, time_str = "N/A", "N/A"
-
-    caption = (
-        f"🎵 <b>{title}</b>\n"
-        f"👤 Channel: {uploader}\n"
-        f"📺 <a href='{video_url}'>Watch on YouTube</a>\n"
-        f"📂 Category: {category}\n"
-        f"📅 Uploaded: {date_str}\n"
-        f"⏰ Time: {time_str} UTC\n"
-        f"⏳ Length: {length_str}\n"
-        f"👁️ Views: {views:,}\n"
-        f"👍 Likes: {likes}\n"
-        f"👎 Dislikes: {dislikes}\n"
-        f"💬 Comments: {comments}\n\n"
-        f"🙋 Requested by: {update.effective_user.mention_html()}"
-    )
-
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2")]
-    ])
-
+# -----------------------
+def format_number(v) -> str:
     try:
-        await update.message.reply_audio(
-            audio=open(file_path, "rb"),
-            caption=caption,
-            parse_mode="HTML",
-            reply_markup=keyboard
-        )
-    except Exception as e:
-        await status_msg.edit_text(f"⚠️ Upload failed: {e}")
-        await asyncio.sleep(10)
-        await status_msg.delete()
-        return
-    finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        return f"{int(v):,}"
+    except:
+        return "N/A"
 
-    # delete service "downloading..." message
-    await status_msg.delete()
+class YTDLLogger:
+    def __init__(self):
+        self.buf = io.StringIO()
+    def debug(self, msg): self.buf.write(f"DEBUG: {msg}\n")
+    def info(self, msg): self.buf.write(f"INFO: {msg}\n")
+    def warning(self, msg): self.buf.write(f"WARN: {msg}\n")
+    def error(self, msg): self.buf.write(f"ERROR: {msg}\n")
+    def tail(self, n=3000):
+        s = self.buf.getvalue()
+        return s[-n:] if len(s) > n else s
+
+# -----------------------
+def register(app: Client):
+    @app.on_message(filters.command("song"))
+    async def song_cmd(client, message: types.Message):
+        if len(message.command) < 2:
+            await message.reply_text("Usage: /song <YouTube URL or keywords>")
+            return
+
+        query = " ".join(message.command[1:])
+        is_url = query.startswith(("http://", "https://"))
+        request_url = query if is_url else f"ytsearch1:{query}"
+
+        status_msg = await message.reply_text("🎵 Preparing download...")
+
+        os.makedirs("downloads", exist_ok=True)
+        ffmpeg_path = shutil.which("ffmpeg")
+        if not ffmpeg_path:
+            await status_msg.edit_text("❌ FFmpeg not found. Install ffmpeg and add to PATH.")
+            await asyncio.sleep(6)
+            try: await status_msg.delete()
+            except: pass
+            return
+
+        # cookies support
+        cookie_path: Optional[str] = None
+        if os.path.exists("modules/cookies.txt"):
+            cookie_path = "modules/cookies.txt"
+        elif os.path.exists("cookies.txt"):
+            cookie_path = "cookies.txt"
+
+        ylog = YTDLLogger()
+
+        ydl_opts = {
+            "format": "bestaudio[ext=m4a]/bestaudio/best",
+            "outtmpl": os.path.join("downloads", "%(title)s-%(id)s.%(ext)s"),
+            "noplaylist": True,
+            "nocheckcertificate": True,
+            "geo_bypass": True,
+            "quiet": True,
+            "prefer_ffmpeg": True,
+            "postprocessors": [{"key": "FFmpegExtractAudio","preferredcodec": "mp3","preferredquality": "192"}],
+            "postprocessor_args": ["-ar", "44100"],
+            "extractor_args": {"youtube": {"player_client": ["web"]}},
+            "youtube_skip_dash_manifest": True,
+            "logger": ylog,
+            # Optional proxy for geo-blocked videos:
+            # "proxy": "socks5://12.34.56.78:1080",
+        }
+        if cookie_path:
+            ydl_opts["cookiefile"] = cookie_path
+        if ffmpeg_path:
+            ydl_opts["ffmpeg_location"] = ffmpeg_path
+
+        loop = asyncio.get_event_loop()
+
+        def download_and_ensure_mp3():
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(request_url, download=True)
+                    if not info: return None, None, ylog.tail()
+                    if isinstance(info, dict) and info.get("entries"):
+                        info = info["entries"][0]
+                    base = ydl.prepare_filename(info)
+                    mp3_path = os.path.splitext(base)[0] + ".mp3"
+                    if os.path.exists(mp3_path): return info, mp3_path, ylog.tail()
+                    # fallback conversion
+                    possible_exts = [os.path.splitext(base)[1], ".m4a", ".webm", ".opus", ".mp4", ".mkv", ".flv", ".aac", ".wav", ".oga"]
+                    found_source = next((os.path.splitext(base)[0]+ext for ext in possible_exts if os.path.exists(os.path.splitext(base)[0]+ext)), None)
+                    if not found_source: return info, None, ylog.tail()
+                    cmd = [ffmpeg_path, "-y", "-i", found_source, "-vn", "-ab", "192k", "-ar", "44100", mp3_path]
+                    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if proc.returncode != 0:
+                        ylog.error(f"ffmpeg failed: rc={proc.returncode} stderr={proc.stderr}")
+                        return info, None, ylog.tail() + "\nFFMPEG STDERR:\n" + proc.stderr
+                    try: os.remove(found_source)
+                    except: pass
+                    if os.path.exists(mp3_path): return info, mp3_path, ylog.tail()
+                    return info, None, ylog.tail()
+            except Exception as e:
+                ylog.error(f"yt-dlp exception: {e}")
+                return None, None, ylog.tail() + f"\nException: {e}"
+
+        info, mp3_file, logs = await loop.run_in_executor(None, download_and_ensure_mp3)
+
+        if not info or not mp3_file or not os.path.exists(mp3_file):
+            tail = logs or "No logs captured."
+            msg_text = f"❌ Failed: Audio file could not be created.\n\nLogs:\n{tail[-4000:]}"
+            try: await status_msg.edit_text(msg_text)
+            except: await message.reply_text(msg_text)
+            return
+
+        try:
+            title = info.get("title", "Unknown Title")
+            uploader = info.get("uploader", "Unknown Channel")
+            video_id = info.get("id") or ""
+            video_url = info.get("webpage_url") or (f"https://youtu.be/{video_id}" if video_id else "N/A")
+            views = format_number(info.get("view_count"))
+            likes = format_number(info.get("like_count"))
+            dislikes = format_number(info.get("dislike_count"))
+
+            ts = info.get("release_timestamp") or info.get("timestamp")
+            upload_date_field = info.get("upload_date")
+            if ts:
+                dt = datetime.fromtimestamp(int(ts), tz=timezone.utc)
+                date_str = dt.strftime("%Y/%m/%d")
+                time_str = dt.strftime("%H:%M:%S")
+            elif upload_date_field:
+                try:
+                    dt = datetime.strptime(upload_date_field, "%Y%m%d")
+                    date_str = dt.strftime("%Y/%m/%d")
+                    time_str = "00:00:00"
+                except:
+                    date_str, time_str = upload_date_field, "N/A"
+            else:
+                date_str, time_str = "N/A", "N/A"
+
+            duration_sec = info.get("duration")
+            if duration_sec:
+                hrs, rem = divmod(duration_sec, 3600)
+                mins, secs = divmod(rem, 60)
+                duration_str = f"{int(hrs):02}:{int(mins):02}:{int(secs):02}" if hrs else f"{int(mins):02}:{int(secs):02}"
+            else:
+                duration_str = "N/A"
+
+            try:
+                size_mb = os.path.getsize(mp3_file) / (1024*1024)
+                size_str = f"{size_mb:.2f} MB"
+            except: size_str = "N/A"
+
+            caption = (
+                f"🎵 <b>{title}</b>\n"
+                f"👤 Channel: {uploader}\n"
+                f"📺 <a href='{video_url}'>Watch on YouTube</a>\n"
+                f"📅 Uploaded: {date_str}\n"
+                f"⏰ Time: {time_str} UTC\n"
+                f"⏳ Length: {duration_str}\n"
+                f"👁️ Views: {views}\n"
+                f"👍 Likes: {likes}\n"
+                f"👎 Dislikes: {dislikes}\n"
+                f"📦 File size: {size_str}\n\n"
+                f"🙋 Requested by: {message.from_user.mention}\n"
+                f"🤖 Uploaded by Bot"
+            )
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2")]
+            ])
+
+            await message.reply_audio(
+                audio=mp3_file,
+                caption=caption,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+                title=title,
+                performer=uploader
+            )
+
+        finally:
+            try: os.remove(mp3_file)
+            except: pass
+            try: await status_msg.delete()
+            except: pass
