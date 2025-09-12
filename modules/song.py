@@ -3,13 +3,13 @@ import io
 import shutil
 import subprocess
 import asyncio
-from pyrogram import filters
 from datetime import datetime, timezone
 from typing import Optional
 
 import yt_dlp
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram import Client, types
+from pyrogram import filters
+from pyrogram.enums import ParseMode
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputFile
 
 # -----------------------
 def format_number(v) -> str:
@@ -30,9 +30,9 @@ class YTDLLogger:
         return s[-n:] if len(s) > n else s
 
 # -----------------------
-def register(app: Client):
+def register(app):
     @app.on_message(filters.command("song"))
-    async def song_cmd(client, message: types.Message):
+    async def song_cmd(client, message):
         if len(message.command) < 2:
             await message.reply_text("Usage: /song <YouTube URL or keywords>")
             return
@@ -52,7 +52,6 @@ def register(app: Client):
             except: pass
             return
 
-        # cookies support
         cookie_path: Optional[str] = None
         if os.path.exists("modules/cookies.txt"):
             cookie_path = "modules/cookies.txt"
@@ -69,12 +68,16 @@ def register(app: Client):
             "geo_bypass": True,
             "quiet": True,
             "prefer_ffmpeg": True,
-            "postprocessors": [{"key": "FFmpegExtractAudio","preferredcodec": "mp3","preferredquality": "192"}],
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }],
             "postprocessor_args": ["-ar", "44100"],
             "extractor_args": {"youtube": {"player_client": ["web"]}},
             "youtube_skip_dash_manifest": True,
             "logger": ylog,
-            # Optional proxy for geo-blocked videos:
+            # Optional proxy:
             # "proxy": "socks5://12.34.56.78:1080",
         }
         if cookie_path:
@@ -90,7 +93,8 @@ def register(app: Client):
                     info = ydl.extract_info(request_url, download=True)
                     if not info: return None, None, ylog.tail()
                     if isinstance(info, dict) and info.get("entries"):
-                        info = info["entries"][0]
+                        entries = info.get("entries")
+                        if entries: info = entries[0]
                     base = ydl.prepare_filename(info)
                     mp3_path = os.path.splitext(base)[0] + ".mp3"
                     if os.path.exists(mp3_path): return info, mp3_path, ylog.tail()
@@ -123,11 +127,14 @@ def register(app: Client):
         try:
             title = info.get("title", "Unknown Title")
             uploader = info.get("uploader", "Unknown Channel")
+            channel_url = info.get("channel_url") or ""
             video_id = info.get("id") or ""
             video_url = info.get("webpage_url") or (f"https://youtu.be/{video_id}" if video_id else "N/A")
             views = format_number(info.get("view_count"))
             likes = format_number(info.get("like_count"))
             dislikes = format_number(info.get("dislike_count"))
+            comments = format_number(info.get("comment_count"))
+            categories = ", ".join(info.get("categories") or []) or "N/A"
 
             ts = info.get("release_timestamp") or info.get("timestamp")
             upload_date_field = info.get("upload_date")
@@ -156,38 +163,47 @@ def register(app: Client):
             try:
                 size_mb = os.path.getsize(mp3_file) / (1024*1024)
                 size_str = f"{size_mb:.2f} MB"
-            except: size_str = "N/A"
+            except:
+                size_str = "N/A"
+
+            bot_name = client.me.first_name or "Bot"
 
             caption = (
                 f"🎵 <b>{title}</b>\n"
-                f"👤 Channel: {uploader}\n"
+                f"👤 Channel: <a href='{channel_url}'>{uploader}</a>\n"
                 f"📺 <a href='{video_url}'>Watch on YouTube</a>\n"
+                f"📂 Category: {categories}\n"
                 f"📅 Uploaded: {date_str}\n"
                 f"⏰ Time: {time_str} UTC\n"
                 f"⏳ Length: {duration_str}\n"
                 f"👁️ Views: {views}\n"
                 f"👍 Likes: {likes}\n"
                 f"👎 Dislikes: {dislikes}\n"
-                f"📦 File size: {size_str}\n\n"
+                f"📦 File size: {size_str}\n"
+                f"💬 Comments: {comments}\n\n"
                 f"🙋 Requested by: {message.from_user.mention}\n"
-                f"🤖 Uploaded by Bot"
+                f"🤖 Uploaded by: {bot_name}"
             )
 
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2")]
+                [
+                    InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/deweni2"),
+                    InlineKeyboardButton("📢 Support Group", url="https://t.me/slmusicmania")
+                ]
             ])
 
+            try: await status_msg.delete()
+            except: pass
+
+            audio_file = InputFile(mp3_file)
             await message.reply_audio(
-                audio=mp3_file,
+                audio=audio_file,
                 caption=caption,
-                parse_mode="HTML",
+                parse_mode=ParseMode.HTML,
                 reply_markup=keyboard,
                 title=title,
                 performer=uploader
             )
-
         finally:
             try: os.remove(mp3_file)
-            except: pass
-            try: await status_msg.delete()
             except: pass
