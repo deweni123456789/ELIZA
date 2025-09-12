@@ -81,6 +81,13 @@ def register(app):
         else:
             file_size_str = "N/A"
 
+        # --- Extra Metadata ---
+        license_info = info.get("license", "N/A")
+        age_limit = info.get("age_limit", 0)
+        age_restricted = "Yes 🔞" if age_limit and age_limit >= 18 else "No"
+
+        thumbnail_url = info.get("thumbnail")
+
         # --- Caption ---
         caption = (
             f"🎵 **Title:** {info.get('title')}\n"
@@ -93,10 +100,36 @@ def register(app):
             f"👍 **Likes:** {info.get('like_count','N/A')}\n"
             f"👎 **Dislikes:** N/A\n"
             f"💬 **Comments:** {info.get('comment_count','N/A')}\n"
-            f"📦 **File Size:** {file_size_str}\n\n"
+            f"📦 **File Size:** {file_size_str}\n"
+            f"📜 **License:** {license_info}\n"
+            f"🔞 **Age Restricted:** {age_restricted}\n\n"
             f"🔗 [Watch on YouTube]({info.get('webpage_url')})\n\n"
             f"🙋‍♂️ **Requested by:** {message.from_user.mention}\n"
             f"🤖 **Uploaded by:** {config.BOT_NAME}"
+        )
+
+        # --- Inline Buttons ---
+        reply_markup = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "👨‍💻 Developer",
+                        url=f"https://t.me/{config.DEVELOPER.replace('@','')}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🌸 Support Group 🌸",
+                        url="https://t.me/slmusicmania"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🎬 Open in YouTube",
+                        url=info.get("webpage_url")
+                    )
+                ]
+            ]
         )
 
         try:
@@ -104,20 +137,8 @@ def register(app):
                 chat_id=message.chat.id,
                 audio=file_path,
                 caption=caption,
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "👨‍💻 Developer",
-                                url=f"https://t.me/{config.DEVELOPER.replace('@','')}"
-                            ),
-                            InlineKeyboardButton(
-                                "🎵 Support Group",
-                                url="https://t.me/slmusicmania"
-                            )
-                        ]
-                    ]
-                )
+                thumb=thumbnail_url,   # ✅ Add YouTube thumbnail as cover art
+                reply_markup=reply_markup
             )
         finally:
             if os.path.exists(file_path):
