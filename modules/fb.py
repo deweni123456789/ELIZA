@@ -6,15 +6,16 @@ import functools
 from pathlib import Path
 from typing import Optional
 
-from pyrogram import filters
+from pyrogram import Client, filters
 from pyrogram.types import Message
 import yt_dlp
+import logging
 
-# adjust temporary folder as needed
+logging.basicConfig(level=logging.INFO)
+
 TMP_DIR = Path("/tmp") if os.name != "nt" else Path.cwd() / "tmp"
 TMP_DIR.mkdir(parents=True, exist_ok=True)
 
-# Maximum file size to attempt sending directly (bytes).
 MAX_SEND_SIZE = 1_800_000_000  # ~1.8GB
 
 def _yt_opts(output_path: Path):
@@ -22,8 +23,8 @@ def _yt_opts(output_path: Path):
         "format": "bestvideo+bestaudio/best",
         "outtmpl": str(output_path / "%(id)s.%(ext)s"),
         "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
+        "quiet": False,            # 👉 enable logs
+        "no_warnings": False,      # 👉 enable warnings
         "postprocessors": [
             {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
         ],
@@ -32,14 +33,13 @@ def _yt_opts(output_path: Path):
     }
 
 async def _run_ydl_download(url: str, out_dir: Path):
-    """Run yt_dlp download in a thread. Returns final filepath (Path)."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, functools.partial(_sync_download, url, out_dir))
 
 def _sync_download(url: str, out_dir: Path) -> Path:
     opts = _yt_opts(out_dir)
-    ydl = yt_dlp.YoutubeDL(opts)
-    ydl.download([url])
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.download([url])
     files = sorted(out_dir.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not files:
         raise FileNotFoundError("No file produced by yt-dlp")
@@ -55,33 +55,23 @@ def is_facebook_url(text: str) -> Optional[str]:
                 return p.strip("<>.,;:!?'\"")
     return None
 
-def register(app):
-    """
-    Call register(app) from your main.py to add the FB auto-downloader.
-    """
-
+def register(app: Client):
     @app.on_message(filters.command("fb"))
     async def fb_cmd(_, message: Message):
-        """Manual /fb <link> command"""
         if len(message.command) < 2:
-            return await message.reply_text(
-                "⚠️ Send `/fb <facebook url>` or just paste a Facebook link."
-            )
+            return await message.reply_text("⚠️ Usage: `/fb <facebook url>`")
         url = message.command[1]
-        await _handle_download_flow(app, message, url)
+        await _handle_download_flow(_, message, url)
 
     @app.on_message(filters.text)
     async def fb_auto_detector(_, message: Message):
-        """Auto-detect Facebook links in any text message"""
         url = is_facebook_url(message.text or "")
         if not url:
             return
-        await _handle_download_flow(app, message, url)
+        await _handle_download_flow(_, message, url)
 
-    async def _handle_download_flow(client, message: Message, url: str):
-        status = await message.reply_text(
-            f"🔎 Detected Facebook link:\n`{url}`\n\n⏳ Downloading..."
-        )
+    async def _handle_download_flow(client: Client, message: Message, url: str):
+        status = await message.reply_text(f"🔎 Detected Facebook link:\n`{url}`\n\n⏳ Downloading...")
         unique = uuid.uuid4().hex
         out_dir = TMP_DIR / f"fb_{unique}"
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -90,8 +80,8 @@ def register(app):
             try:
                 filepath = await _run_ydl_download(url, out_dir)
             except Exception as e:
-                await status.edit(f"❌ Download failed: `{e}`")
-                return
+                logging.exception("FB download error")
+                return await status.edit(f"❌ Download failed: `{e}`")
 
             size = filepath.stat().st_size
             caption = f"📥 Facebook Video\n`{filepath.name}`\nSize: {size/1024/1024:.2f} MB"
@@ -106,15 +96,12 @@ def register(app):
                 )
                 await status.delete()
             else:
-                await status.edit(
-                    "⚠️ File too large to upload via bot (Telegram limit ~2GB)."
-                )
+                await status.edit("⚠️ File too large (Telegram limit ~2GB).")
         finally:
-            try:
-                for f in out_dir.glob("*"):
-                    f.unlink(missing_ok=True)
-                out_dir.rmdir()
-            except Exception:
-                pass
+            for f in out_dir.glob("*"):
+                try: f.unlink()
+                except: pass
+            try: out_dir.rmdir()
+            except: pass
 
     return app
