@@ -4,7 +4,6 @@ import config
 from modules.tiktok import register as register_tiktok, handle_callbacks as tiktok_callbacks
 from modules.song import register as register_song
 from modules.video import register as register_video
-from modules.fb import register as register_fb
 
 app = Client(
     "downloader-bot",
