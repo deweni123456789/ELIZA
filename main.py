@@ -1,12 +1,6 @@
-import logging
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import config
-
-# ---- Enable logging (show INFO, DEBUG logs in Railway console)
-logging.basicConfig(level=logging.INFO)
-
-# ---- Import modules
 from modules.tiktok import register as register_tiktok, handle_callbacks as tiktok_callbacks
 from modules.song import register as register_song
 from modules.video import register as register_video
@@ -22,7 +16,6 @@ app = Client(
 # ---- Start message
 @app.on_message(filters.command("start"))
 async def start(_, message):
-    print("👉 /start command received")   # DEBUG LOG
     await message.reply_text(
         "👋 Hello! I can download songs & videos from YouTube.\n\n"
         "🎵 Use `/song <name>` to download a song (MP3).\n"
@@ -36,18 +29,16 @@ async def start(_, message):
 # ---- Callback handler
 @app.on_callback_query()
 async def callbacks(bot, query):
-    print("👉 Callback query received:", query.data)   # DEBUG LOG
     await tiktok_callbacks(bot, query)
-    # ⚠️ Comment out YouTube callbacks if not defined
-    # await youtube_callbacks(bot, query)
+    await youtube_callbacks(bot, query)
+    # If you have other callback handlers, import and call them here
+    # await some_other_callbacks(bot, query)
 
 # ---- Register modules
 register_song(app)
 register_video(app)
 register_tiktok(app)
 register_fb(app)
-
-print("✅ All modules registered successfully!")   # DEBUG LOG
 
 # ---- Run bot
 app.run()
