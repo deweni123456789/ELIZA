@@ -4,7 +4,7 @@ import uuid
 import asyncio
 import functools
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -23,12 +23,7 @@ TMP_DIR.mkdir(parents=True, exist_ok=True)
 MAX_SEND_SIZE = 1_800_000_000  # ~1.8GB
 
 # ----------------------------
-# Cache for auto-detect tokens
-# ----------------------------
-_FB_CACHE: Dict[str, str] = {}
-
-# ----------------------------
-# YT-DLP Options
+# YT-DLP download helper
 # ----------------------------
 def _yt_opts(output_path: Path):
     return {
@@ -47,31 +42,38 @@ async def _run_ydl_download(url: str, out_dir: Path):
 
 def _sync_download(url: str, out_dir: Path) -> Path:
     opts = _yt_opts(out_dir)
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+    except Exception as e:
+        logging.error(f"YT-DLP download failed: {e}")
+        raise
     files = sorted(out_dir.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not files:
         raise FileNotFoundError("No file produced by yt-dlp")
     return files[0]
 
 # ----------------------------
-# Helper: detect FB links
+# FB URL detection
 # ----------------------------
 def is_facebook_url(text: str) -> Optional[str]:
     if not text:
         return None
-    text = text.lower()
-    if "facebook.com" in text or "fb.watch" in text or "m.facebook.com" in text:
-        for word in text.split():
-            if "facebook.com" in word or "fb.watch" in word or "m.facebook.com" in word:
-                return word.strip("<>.,;:!?'\"")
+    text_lower = text.lower()
+    for word in text.split():
+        if "facebook.com" in word or "fb.watch" in word or "m.facebook.com" in word:
+            return word.strip("<>.,;:!?'\"")
     return None
 
 # ----------------------------
-# Core download & send
+# Core download logic
 # ----------------------------
 async def _handle_download_flow(client: Client, message: Message, url: str):
-    status = await message.reply_text(f"🔎 Detected Facebook link:\n`{url}`\n⏳ Downloading...")
+    try:
+        status = await message.reply_text(f"🔎 Detected Facebook link:\n`{url}`\n⏳ Downloading...")
+    except Exception:
+        return
+
     unique = uuid.uuid4().hex
     out_dir = TMP_DIR / f"fb_{unique}"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -87,14 +89,18 @@ async def _handle_download_flow(client: Client, message: Message, url: str):
         caption = f"📥 Facebook Video\n`{filepath.name}`\nSize: {size/1024/1024:.2f} MB"
 
         if size <= MAX_SEND_SIZE:
-            await status.edit("📤 Uploading to Telegram...")
-            await client.send_video(
-                chat_id=message.chat.id,
-                video=str(filepath),
-                caption=caption,
-                supports_streaming=True,
-            )
-            await status.delete()
+            try:
+                await status.edit("📤 Uploading to Telegram...")
+                await client.send_video(
+                    chat_id=message.chat.id,
+                    video=str(filepath),
+                    caption=caption,
+                    supports_streaming=True
+                )
+                await status.delete()
+            except Exception as e:
+                logging.error(f"Upload failed: {e}")
+                await status.edit(f"❌ Upload failed: {e}")
         else:
             await status.edit("⚠️ File too large (Telegram limit ~2GB).")
 
@@ -110,19 +116,18 @@ async def _handle_download_flow(client: Client, message: Message, url: str):
 # Register FB module
 # ----------------------------
 def register(app: Client):
-
-    # --- /fb command
-    @app.on_message(filters.command("fb"))
+    # /fb command
+    @app.on_message(filters.command("fb") & (filters.private | filters.group))
     async def fb_cmd(_, message: Message):
         if len(message.command) < 2:
             return await message.reply_text("⚠️ Usage: `/fb <facebook url>`")
         url = message.command[1]
         await _handle_download_flow(_, message, url)
 
-    # --- Auto-detect FB links in any message
+    # Auto detect FB links
     @app.on_message(filters.text & (filters.private | filters.group))
     async def fb_auto_detector(_, message: Message):
-        url = is_facebook_url(message.text or "")
+        url = is_facebook_url(message.text)
         if not url:
             return
         await _handle_download_flow(_, message, url)
