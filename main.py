@@ -37,7 +37,6 @@ async def callbacks(bot, query):
 register_song(app)
 register_video(app)
 register_tiktok(app)
-register_fb(app)
 
 # ---- Run bot
 app.run()
